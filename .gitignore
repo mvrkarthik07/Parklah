@@ -1,0 +1,13 @@
+# Node
+node_modules
+*.log
+# DB
+backend/prisma/dev.db
+backend/prisma/dev.db-journal
+# Build
+frontend/dist
+backend/dist
+# Env
+.env
+backend/.env
+frontend/.env

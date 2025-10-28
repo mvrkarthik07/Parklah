@@ -1,0 +1,58 @@
+// backend/prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"            // <- MUST be a literal for local dev
+  url      = env("DATABASE_URL") // e.g. file:./dev.db
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  profile      Profile?
+  favorites    Favorite[]
+  queries      QueryLog[]
+}
+
+model Profile {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  vehicleType   VehicleType
+  vehicleHeight Float
+  user          User     @relation(fields: [userId], references: [id])
+}
+
+enum VehicleType {
+  CAR
+  HEAVY
+  MOTORCYCLE_WITH_SIDECAR
+  MOTORCYCLE
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  carparkId String
+  label     String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model QueryLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  lat       Float
+  lng       Float
+  radiusM   Int
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
