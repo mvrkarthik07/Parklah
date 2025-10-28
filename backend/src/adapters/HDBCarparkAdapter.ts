@@ -1,167 +1,163 @@
-// backend/src/adapters/hdb.ts
+// backend/src/adapters/HDBCarparkAdapter.ts
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { parse } from 'csv-parse/sync'
 import { env } from '../config/env'
 
-// reconstruct __dirname for ESM
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
 export type Lot = { total: number; available: number }
-
 export type Carpark = {
   id: string
   name: string
   address: string
   lat: number
   lng: number
+  carparkType?: string
   lotAvailability: { C?: Lot; H?: Lot; S?: Lot; Y?: Lot }
   gantryHeightM?: number
-  carparkType?: string
-  fee: {
-    weekday?: string
-    saturday?: string
-    sundayPH?: string
-    freeParking?: string | null
-  }
+  fee: { weekday?: string; saturday?: string; sundayPH?: string; freeParking?: string | null }
   distanceM?: number
   etaS?: number
 }
 
-type Meta = Omit<Carpark, 'lotAvailability' | 'fee' | 'distanceM' | 'etaS'>
-type Row = Record<string, unknown>
+type MetaRow = Omit<Carpark, 'lotAvailability' | 'distanceM' | 'etaS' | 'fee'> & { fee?: Carpark['fee'] }
 
-let META: Meta[] = []
-let RATES: Record<string, Carpark['fee']> = Object.create(null)
+let META: MetaRow[] = []
+let RATES: Record<string, Carpark['fee']> = {}
 
-// --- correct backend/data path ---
-const DATA_DIR = path.resolve(__dirname, '../../data')
+/** Resolve CSV paths (supports .env overrides) */
+function resolveCsvPaths() {
+  const carparksCsv = env.CARPARKS_CSV_PATH
+    ? path.resolve(process.cwd(), 'backend', env.CARPARKS_CSV_PATH.replace(/^(\.\/)/, ''))
+    : path.resolve(process.cwd(), 'backend', 'data', 'hdb_carparks.csv')
 
-// ---------- helpers ----------
-function toNum(v: unknown): number | undefined {
-  if (v == null) return undefined
-  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^0-9.\-]/g, ''))
-  return Number.isFinite(n) ? n : undefined
+  const ratesCsv = env.CARPARK_RATES_CSV_PATH
+    ? path.resolve(process.cwd(), 'backend', env.CARPARK_RATES_CSV_PATH.replace(/^(\.\/)/, ''))
+    : path.resolve(process.cwd(), 'backend', 'data', 'carpark_rates.csv')
+
+  return { carparksCsv, ratesCsv }
 }
 
-function normalizeRowKeys<T extends Row>(r: T): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(r).map(([k, v]) => [k.toLowerCase(), v]))
-}
+/** Load CSV metadata (id,name,address,lat,lng,carparkType,gantryHeightM) and rates into memory */
+export function initCarparkMetaFromCsv(): void {
+  const { carparksCsv, ratesCsv } = resolveCsvPaths()
 
-function pick(r: Row, keys: string[]): string | undefined {
-  for (const k of keys) {
-    const v = r[k]
-    if (v != null && v !== '') return String(v)
-  }
-  return undefined
-}
+  // Carparks meta
+  // --- Load carpark metadata (header-aware) ---
+try {
+  const raw = fs.readFileSync(carparksCsv, 'utf8')
+  const lines = raw.split(/\r?\n/).filter(Boolean)
+  if (lines.length < 2) throw new Error('CSV has no rows')
 
-export function initCarparkMetaFromCsv(
-  carparksCsvPath = process.env.CARPARKS_CSV_PATH || path.join(DATA_DIR, 'HDBCarparkInformation.csv'),
-  ratesCsvPath = process.env.CARPARK_RATES_CSV_PATH || path.join(DATA_DIR, 'CarparkRates.csv')
-) {
-  console.log('[HDB] Using CSV paths:', { carparksCsvPath, ratesCsvPath })
-
-  if (fs.existsSync(carparksCsvPath)) {
-    const rows = parse(fs.readFileSync(carparksCsvPath), { columns: true, skip_empty_lines: true }) as Row[]
-    META = rows.map((raw): Meta | null => {
-      const r = normalizeRowKeys(raw)
-      const id = (pick(r, ['car_park_no', 'carpark_number']) || '').trim()
-      const lat = toNum(r['latitude'] ?? r['y_coord'] ?? r['lat'])
-      const lng = toNum(r['longitude'] ?? r['x_coord'] ?? r['lng'])
-      if (!id || lat == null || lng == null) return null
-      const ghNum = toNum(r['gantry_height'])
-      return {
-        id,
-        name: (pick(r, ['development', 'name']) || '').trim(),
-        address: (pick(r, ['address']) || '').trim(),
-        lat,
-        lng,
-        gantryHeightM: ghNum,
-        carparkType: (pick(r, ['car_park_type', 'type']) || '').trim().toUpperCase(),
-      }
-    }).filter((x): x is Meta => !!x)
-  } else {
-    console.warn(`[HDB] Carparks CSV not found at ${carparksCsvPath}. META will be empty.`)
+  const header = lines[0].split(',').map(h => h.trim())
+  const idx = (name: string) => header.findIndex(h => h.toLowerCase() === name.toLowerCase())
+  const pickIdx = (...aliases: string[]) => {
+    for (const a of aliases) { const i = idx(a); if (i >= 0) return i }
+    return -1
   }
 
-  if (fs.existsSync(ratesCsvPath)) {
-    const rows = parse(fs.readFileSync(ratesCsvPath), { columns: true, skip_empty_lines: true }) as Row[]
-    for (const raw of rows) {
-      const r = normalizeRowKeys(raw)
-      const id = (pick(r, ['car_park_no', 'carpark_number']) || '').trim()
+  const idI   = pickIdx('id','car_park_no','carpark_number','CarParkID','carpark_id')
+  const nameI = pickIdx('name','development','carpark_name')
+  const addrI = pickIdx('address','blk_no_and_street_name','location','street_name')
+  const latI  = pickIdx('lat','latitude','y','y_coord','Y_COORD','Latitude')
+  const lngI  = pickIdx('lng','longitude','x','x_coord','X_COORD','Longitude')
+  const typeI = pickIdx('carpark_type','car_park_type','type')
+  const ghtI  = pickIdx('gantry_height','gantryheight','GantryHeight')
+
+  const [, ...rows] = lines
+  META = rows.map((line) => {
+    // naive split; if your CSV has quoted commas, switch to a real CSV lib later
+    const cols = line.split(',')
+    const id = (cols[idI] ?? '').trim()
+    if (!id) return null
+
+    const name = (nameI >= 0 ? cols[nameI] : id)?.trim() || id
+    const address = (addrI >= 0 ? cols[addrI] : '')?.trim() || ''
+
+    let lat = parseFloat((latI >= 0 ? cols[latI] : '') || '')
+    let lng = parseFloat((lngI >= 0 ? cols[lngI] : '') || '')
+    // if both look like degrees >50 (bad), swap (handles X/Y)
+    if (lat > 50 && lng > 50) { const t = lat; lat = lng; lng = t }
+    if (!Number.isFinite(lat)) lat = 1.3521
+    if (!Number.isFinite(lng)) lng = 103.8198
+
+    const carparkType = (typeI >= 0 ? cols[typeI] : 'MULTI-STOREY')?.trim() || 'MULTI-STOREY'
+    const gantryHeightM = parseFloat((ghtI >= 0 ? cols[ghtI] : '') || '') || undefined
+
+    return { id, name, address, lat, lng, carparkType, gantryHeightM }
+  }).filter(Boolean) as typeof META
+} catch (e) {
+  console.warn(`[HDB] Failed to read carparks CSV (${carparksCsv}): ${(e as Error).message}`)
+  META = []
+}
+
+
+  // Rates
+  try {
+    const raw = fs.readFileSync(ratesCsv, 'utf8')
+    const lines = raw.split(/\r?\n/).filter(Boolean)
+    const [, ...rows] = lines
+    RATES = {}
+    for (const line of rows) {
+      const cols = line.split(',')
+      const id = (cols[0] || '').trim()
       if (!id) continue
       RATES[id] = {
-        weekday: pick(r, ['weekday_rate', 'weekday']),
-        saturday: pick(r, ['saturday_rate', 'saturday']),
-        sundayPH: pick(r, ['sunday_ph_rate', 'sunday_ph']),
-        freeParking: pick(r, ['free_parking']) ?? null,
+        weekday: (cols[1] || undefined)?.trim(),
+        saturday: (cols[2] || undefined)?.trim(),
+        sundayPH: (cols[3] || undefined)?.trim(),
+        freeParking: (cols[4] || '').trim() || null,
       }
     }
-  } else {
-    console.info(`[HDB] Rates CSV not found at ${ratesCsvPath}. Fees will be empty.`)
+  } catch (e) {
+    console.warn(`[HDB] Rates CSV not found or unreadable. Using empty rates. Path=${resolveCsvPaths().ratesCsv}`)
+    RATES = {}
   }
 
-  console.log(`[HDB] Loaded ${META.length} carparks, ${Object.keys(RATES).length} rate rows`)
+  console.log(`[HDB] Loaded META rows=${META.length}, RATE rows=${Object.keys(RATES).length}`)
 }
 
-function withRates(m: Meta): Carpark {
-  const fee = RATES[m.id] || {}
-  return {
-    ...m,
-    lotAvailability: {},
-    fee: {
-      weekday: fee.weekday,
-      saturday: fee.saturday,
-      sundayPH: fee.sundayPH,
-      freeParking: fee.freeParking ?? null,
-    },
+export function nearestN(center: { lat: number; lng: number }, n = 50): Carpark[] {
+  const latToM = 111_000
+  const lngToM = (lat: number) => 111_000 * Math.cos((lat * Math.PI) / 180)
+
+  const scored = META.map(m => {
+    const dx = (m.lng - center.lng) * lngToM(center.lat)
+    const dy = (m.lat - center.lat) * latToM
+    const dist = Math.hypot(dx, dy)
+    const cp: Carpark = { ...m, lotAvailability: {}, fee: RATES[m.id] || {}, distanceM: dist, etaS: undefined }
+    return cp
+  })
+  scored.sort((a,b) => (a.distanceM ?? 9e9) - (b.distanceM ?? 9e9))
+  return scored.slice(0, n)
+}
+
+/** Return carparks within radius (meters) of the center using quick planar approximation */
+export async function nearbyCarparks(
+  center: { lat: number; lng: number },
+  radiusM: number
+): Promise<Carpark[]> {
+  // convert deg deltas to meters (approx)
+  const latToM = 111_000
+  const lngToM = (lat: number) => 111_000 * Math.cos((lat * Math.PI) / 180)
+
+  const result: Carpark[] = []
+  for (const m of META) {
+    const dx = (m.lng - center.lng) * lngToM(center.lat)
+    const dy = (m.lat - center.lat) * latToM
+    const dist = Math.hypot(dx, dy)
+    if (dist <= radiusM) {
+      result.push({
+        ...m,
+        lotAvailability: {}, // merged later with live/mock availability
+        fee: RATES[m.id] || {},
+        distanceM: undefined,
+        etaS: undefined,
+      })
+    }
   }
+  return result
 }
 
-function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
-  const R = 6371000
-  const dLat = (b.lat - a.lat) * Math.PI / 180
-  const dLng = (b.lng - a.lng) * Math.PI / 180
-  const s1 = Math.sin(dLat / 2)
-  const s2 = Math.sin(dLng / 2)
-  const aa = s1 * s1 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * s2 * s2
-  return 2 * R * Math.asin(Math.sqrt(aa))
-}
-
-function inRadius(center: { lat: number; lng: number }, radiusM: number) {
-  return (m: Meta) => haversineMeters(center, { lat: m.lat, lng: m.lng }) <= radiusM
-}
-
-async function getAvailabilityMap(): Promise<Record<string, { C?: Lot; H?: Lot; S?: Lot; Y?: Lot }>> {
-  // TODO: replace this with real HDB availability API fetch
-  return {}
-}
-
-export async function nearbyCarparks(center: { lat: number; lng: number }, radiusM: number): Promise<Carpark[]> {
-  if (env.USE_MOCK) {
-    const TYPES = ['MULTI-STOREY', 'SURFACE', 'BASEMENT']
-    return Array.from({ length: 5 }).map((_, i) => ({
-      id: `CP${i + 1}`,
-      name: `Carpark ${i + 1}`,
-      address: `Blk ${10 + i} Example St`,
-      lat: center.lat + (Math.random() - 0.5) * 0.01,
-      lng: center.lng + (Math.random() - 0.5) * 0.01,
-      lotAvailability: { C: { total: 100, available: Math.floor(Math.random() * 100) } },
-      gantryHeightM: 2.0,
-      carparkType: TYPES[i % TYPES.length],
-      fee: { weekday: '$1.20/hr', saturday: '$1.20/hr', sundayPH: '$0.60/hr', freeParking: i % 2 ? 'Sun 7am–10:30pm' : null },
-    }))
-  }
-
-  if (META.length === 0) initCarparkMetaFromCsv()
-  const nearby = META.filter(inRadius(center, radiusM)).map(withRates)
-  const availMap = await getAvailabilityMap()
-  for (const c of nearby) {
-    const lots = availMap[c.id]
-    if (lots) c.lotAvailability = lots
-  }
-  return nearby
+/** (Optional) expose META for debugging */
+export function getAllMeta(): MetaRow[] {
+  return META
 }
