@@ -34,17 +34,16 @@ export function rankCarparks(items: Carpark[], lotKey: keyof Carpark['lotAvailab
            a.name.localeCompare(b.name)
   })
 }
-export async function searchCarparksByCoords(center: { lat: number; lng: number }, radiusM = 2000, lotKey: keyof Carpark['lotAvailability'] = 'C') {
+export async function searchCarparksByCoords(center: { lat:number; lng:number }, radiusM=3000, lotKey:'C'|'H'|'S'|'Y'='C') {
   initCarparkMetaFromCsv()
   let candidates: Carpark[] = await nearbyCarparks(center, radiusM)
 
+  // no availability merge if USE_LIVE_AVAIL!=1
   if (String(process.env.USE_LIVE_AVAIL) === '1') {
     try {
       const live = await getAvailabilityMap()
       candidates = candidates.map((cp) => ({ ...cp, lotAvailability: live[cp.id] || {} }))
-    } catch (e) {
-      console.warn('[CarparkService] availability merge skipped:', (e as Error).message)
-    }
+    } catch {}
   }
 
   for (const cp of candidates) {
@@ -56,8 +55,9 @@ export async function searchCarparksByCoords(center: { lat: number; lng: number 
   }
 
   const ranked = rankCarparks(candidates, lotKey)
-  return { center, carparks: ranked, meta: { mode: 'near', radiusM, useLiveAvail: String(process.env.USE_LIVE_AVAIL)==='1', count: ranked.length } }
+  return { center, carparks: ranked }
 }
+
 // ------- main use-case -------
 export async function searchCarparks(q: string, radiusM = 2000, lotKey: keyof Carpark['lotAvailability'] = 'C') {
   initCarparkMetaFromCsv()

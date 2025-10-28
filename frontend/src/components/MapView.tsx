@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import L from 'leaflet'
-import type { Carpark } from '../lib/ranking'
 import 'leaflet/dist/leaflet.css'
+import type { Carpark } from '../lib/ranking'
 
 type Props = { lat: number; lng: number; carparks: Carpark[] }
 
@@ -19,11 +19,10 @@ export default function MapView({ lat, lng, carparks }: Props) {
         maxZoom: 19,
       }).addTo(mapRef.current)
       layerRef.current = L.layerGroup().addTo(mapRef.current)
-      // If container was hidden initially, call invalidateSize() when shown
     }
   }, [])
 
-  // recenter on new center
+  // recenter when lat/lng change
   useEffect(() => {
     if (mapRef.current) {
       mapRef.current.setView([lat, lng], 14)
@@ -37,16 +36,15 @@ export default function MapView({ lat, lng, carparks }: Props) {
     for (const c of carparks) {
       if (typeof c.lat !== 'number' || typeof c.lng !== 'number') continue
       L.marker([c.lat, c.lng])
-  .bindPopup(`
-    <b>${c.name}</b><br/>
-    ${c.address}<br/>
-    ${c.fee?.weekday ? `Weekday: ${c.fee.weekday}<br/>` : ''}
-    ${c.fee?.saturday ? `Sat: ${c.fee.saturday}<br/>` : ''}
-    ${c.fee?.sundayPH ? `Sun/PH: ${c.fee.sundayPH}<br/>` : ''}
-    ${c.fee?.freeParking ? `Free parking: ${c.fee.freeParking}` : ''}
-  `)
-  .addTo(layerRef.current!)
-
+        .bindPopup(`
+          <b>${c.name}</b><br/>
+          ${c.address}<br/>
+          ${c.fee?.weekday ? `Weekday: ${c.fee.weekday}<br/>` : ''}
+          ${c.fee?.saturday ? `Sat: ${c.fee.saturday}<br/>` : ''}
+          ${c.fee?.sundayPH ? `Sun/PH: ${c.fee.sundayPH}<br/>` : ''}
+          ${c.fee?.freeParking ? `Free parking: ${c.fee.freeParking}` : ''}
+        `)
+        .addTo(layerRef.current)
     }
   }, [carparks])
 

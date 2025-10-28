@@ -43,47 +43,49 @@ export function initCarparkMetaFromCsv(): void {
   // Carparks meta
   // --- Load carpark metadata (header-aware) ---
 try {
-  const raw = fs.readFileSync(carparksCsv, 'utf8')
-  const lines = raw.split(/\r?\n/).filter(Boolean)
-  if (lines.length < 2) throw new Error('CSV has no rows')
+  // header-aware META loader
+const raw = fs.readFileSync(carparksCsv, 'utf8')
+const lines = raw.split(/\r?\n/).filter(Boolean)
+if (lines.length < 2) throw new Error('CSV has no rows')
 
-  const header = lines[0].split(',').map(h => h.trim())
-  const idx = (name: string) => header.findIndex(h => h.toLowerCase() === name.toLowerCase())
-  const pickIdx = (...aliases: string[]) => {
-    for (const a of aliases) { const i = idx(a); if (i >= 0) return i }
-    return -1
-  }
+const header = lines[0].split(',').map(h => h.trim())
+const idx = (name: string) => header.findIndex(h => h.toLowerCase() === name.toLowerCase())
+const pickIdx = (...aliases: string[]) => {
+  for (const a of aliases) { const i = idx(a); if (i >= 0) return i }
+  return -1
+}
 
-  const idI   = pickIdx('id','car_park_no','carpark_number','CarParkID','carpark_id')
-  const nameI = pickIdx('name','development','carpark_name')
-  const addrI = pickIdx('address','blk_no_and_street_name','location','street_name')
-  const latI  = pickIdx('lat','latitude','y','y_coord','Y_COORD','Latitude')
-  const lngI  = pickIdx('lng','longitude','x','x_coord','X_COORD','Longitude')
-  const typeI = pickIdx('carpark_type','car_park_type','type')
-  const ghtI  = pickIdx('gantry_height','gantryheight','GantryHeight')
+const idI   = pickIdx('id','car_park_no','carpark_number','CarParkID','carpark_id')
+const nameI = pickIdx('name','development','carpark_name')
+const addrI = pickIdx('address','blk_no_and_street_name','location','street_name')
+const latI  = pickIdx('lat','latitude','y','y_coord','Y_COORD','Latitude')
+const lngI  = pickIdx('lng','longitude','x','x_coord','X_COORD','Longitude')
+const typeI = pickIdx('carpark_type','car_park_type','type')
+const ghtI  = pickIdx('gantry_height','gantryheight','GantryHeight')
 
-  const [, ...rows] = lines
-  META = rows.map((line) => {
-    // naive split; if your CSV has quoted commas, switch to a real CSV lib later
-    const cols = line.split(',')
-    const id = (cols[idI] ?? '').trim()
-    if (!id) return null
+const [, ...rows] = lines
+META = rows.map((line) => {
+  const cols = line.split(',')
+  const id = (cols[idI] ?? '').trim()
+  if (!id) return null
+  const name = (nameI >= 0 ? cols[nameI] : id)?.trim() || id
+  const address = (addrI >= 0 ? cols[addrI] : '')?.trim() || ''
 
-    const name = (nameI >= 0 ? cols[nameI] : id)?.trim() || id
-    const address = (addrI >= 0 ? cols[addrI] : '')?.trim() || ''
+  let lat = parseFloat((latI >= 0 ? cols[latI] : '') || '')
+  let lng = parseFloat((lngI >= 0 ? cols[lngI] : '') || '')
 
-    let lat = parseFloat((latI >= 0 ? cols[latI] : '') || '')
-    let lng = parseFloat((lngI >= 0 ? cols[lngI] : '') || '')
-    // if both look like degrees >50 (bad), swap (handles X/Y)
-    if (lat > 50 && lng > 50) { const t = lat; lat = lng; lng = t }
-    if (!Number.isFinite(lat)) lat = 1.3521
-    if (!Number.isFinite(lng)) lng = 103.8198
+  // If both look wrong (>50), swap (dataset uses X/Y)
+  if (lat > 50 && lng > 50) { const t = lat; lat = lng; lng = t }
+  if (!Number.isFinite(lat)) lat = 1.3521
+  if (!Number.isFinite(lng)) lng = 103.8198
 
-    const carparkType = (typeI >= 0 ? cols[typeI] : 'MULTI-STOREY')?.trim() || 'MULTI-STOREY'
-    const gantryHeightM = parseFloat((ghtI >= 0 ? cols[ghtI] : '') || '') || undefined
+  const carparkType = (typeI >= 0 ? cols[typeI] : 'MULTI-STOREY')?.trim() || 'MULTI-STOREY'
+  const gantryHeightM = parseFloat((ghtI >= 0 ? cols[ghtI] : '') || '') || undefined
 
-    return { id, name, address, lat, lng, carparkType, gantryHeightM }
-  }).filter(Boolean) as typeof META
+  return { id, name, address, lat, lng, carparkType, gantryHeightM }
+}).filter(Boolean) as typeof META
+
+  
 } catch (e) {
   console.warn(`[HDB] Failed to read carparks CSV (${carparksCsv}): ${(e as Error).message}`)
   META = []

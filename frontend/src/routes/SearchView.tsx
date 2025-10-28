@@ -22,7 +22,7 @@ export default function SearchView() {
     setLoading(true)
     setError(null)
     try {
-      const res = await api.get('/carparks/search', { params: { q: query, radiusM } })
+      const res = await api.get('/carparks/search', { params: { q: query, radiusM: 5000 } })
      
       
       setCenter(res.data.data.center)
@@ -46,27 +46,46 @@ export default function SearchView() {
 
   async function handleLocateMe() {
   setError(null)
+
+  // 1️⃣ Check browser geolocation support
   if (!('geolocation' in navigator)) {
     setError('Geolocation not supported in this browser')
     return
   }
+
+  // 2️⃣ Get user’s coordinates
   navigator.geolocation.getCurrentPosition(
     async ({ coords }) => {
       const lat = coords.latitude
       const lng = coords.longitude
+
       try {
-        const res = await api.get('/carparks/near', { params: { lat, lng, radiusM: 3000 } })
+        // 3️⃣ Send request to backend
+        const res = await api.get('/carparks/near', {
+          params: { lat, lng, radiusM: 3000 },
+        })
+
+        // 4️⃣ Validate response and update map/list
         if (!res.data?.ok) throw new Error(res.data?.error || 'Near search failed')
+
         setCenter(res.data.data.center)
         setCarparks(res.data.data.carparks || [])
       } catch (e: any) {
+        console.error('Locate me error:', e)
         setError(e?.message || 'Near search failed')
       }
     },
-    (err) => setError(err.message || 'Failed to get location'),
+
+    // 5️⃣ Handle user denying location access
+    (err) => {
+      setError(err.message || 'Failed to get location')
+    },
+
+    // 6️⃣ Options
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
   )
 }
+
 
 
   return (
