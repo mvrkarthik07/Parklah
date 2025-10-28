@@ -1,13 +1,16 @@
 import { Router } from 'express'
 import { searchCarparks, searchCarparksByCoords } from '../services/CarparkService'
 import { getAllMeta, nearestN } from '../adapters/HDBCarparkAdapter'
+
 const r = Router()
 
-// text search: /carparks/search?q=...
+// --------------- TEXT SEARCH ---------------
 r.get('/search', async (req, res) => {
   try {
-    const q = String(req.query.q ?? '')
-    const radiusM = req.query.radiusM ? parseInt(String(req.query.radiusM), 10) : 2000
+    const q = String(req.query.q ?? '').trim()
+    const radiusM = req.query.radiusM ? parseInt(String(req.query.radiusM), 10) : 3000
+    if (!q) return res.status(400).json({ ok: false, error: 'Missing query' })
+
     const data = await searchCarparks(q, radiusM)
     res.json({ ok: true, data })
   } catch (e) {
@@ -15,18 +18,7 @@ r.get('/search', async (req, res) => {
   }
 })
 
-r.get('/debug/meta', (_req, res) => {
-  const m = getAllMeta()
-  res.json({ ok: true, count: m.length, sample: m.slice(0, 3) })
-})
-
-r.get('/debug/near', (req, res) => {
-  const lat = parseFloat(String(req.query.lat))
-  const lng = parseFloat(String(req.query.lng))
-  const n = req.query.n ? parseInt(String(req.query.n), 10) : 20
-  const list = nearestN({ lat, lng }, n)
-  res.json({ ok: true, count: list.length, carparks: list })
-})
+// --------------- NEARBY SEARCH (Locate Me) ---------------
 r.get('/near', async (req, res) => {
   try {
     const lat = parseFloat(String(req.query.lat))
@@ -42,5 +34,17 @@ r.get('/near', async (req, res) => {
   }
 })
 
+// debug endpoints optional
+r.get('/debug/meta', (_req, res) => {
+  const m = getAllMeta()
+  res.json({ ok: true, count: m.length, sample: m.slice(0, 3) })
+})
+r.get('/debug/near', (req, res) => {
+  const lat = parseFloat(String(req.query.lat))
+  const lng = parseFloat(String(req.query.lng))
+  const n = req.query.n ? parseInt(String(req.query.n), 10) : 20
+  const list = nearestN({ lat, lng }, n)
+  res.json({ ok: true, count: list.length, carparks: list })
+})
 
 export default r
