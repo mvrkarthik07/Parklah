@@ -6,11 +6,13 @@
  *   between user and carparks.
  */
 
-import { normalizeLocation } from '../adapters/GeocoderOneMap'
+// OneMap geocoding disabled; we use local centroid or a static fallback
 import { routeToCarpark } from '../adapters/RouteOneMap'
 import {
   initCarparkMetaFromCsv,
   nearbyCarparks,
+  findMetaByText,
+  centroidOfMeta,
   type Carpark,
   type Lot,
 } from '../adapters/HDBCarparkAdapter'
@@ -57,15 +59,26 @@ export function rankCarparks(items: Carpark[], lotKey: keyof Carpark['lotAvailab
 export async function searchCarparks(
   q: string,
   radiusM = 3000,
-  lotKey: keyof Carpark['lotAvailability'] = 'C'
+  lotKey: keyof Carpark['lotAvailability'] = 'C',
+  origin?: { lat: number; lng: number }
 ) {
   initCarparkMetaFromCsv()
 
-  // step 1: convert text to coordinates
-  const center = await normalizeLocation(q)
+  // step 1: derive search center (local-only)
+  let center: { lat: number; lng: number }
+  const matches = findMetaByText(q)
+  const centroid = centroidOfMeta(matches)
+  if (centroid) {
+    center = centroid
+  } else {
+    center = { lat: 1.3521, lng: 103.8198 } // fallback: SG center
+  }
 
   // step 2: find nearby carparks
   let candidates: Carpark[] = await nearbyCarparks(center, radiusM)
+  // Cap work: only route the closest N to keep response fast
+  const ROUTE_LIMIT = 200
+  if (candidates.length > ROUTE_LIMIT) candidates = candidates.slice(0, ROUTE_LIMIT)
 
   // step 3: (optional) live availability if enabled
   if (String(process.env.USE_LIVE_AVAIL) === '1') {
@@ -81,9 +94,10 @@ export async function searchCarparks(
   }
 
   // step 4: compute distance & ETA from user to carpark
+  const from = origin ?? center
   for (const cp of candidates) {
     try {
-      const r = await routeToCarpark(center, { lat: cp.lat, lng: cp.lng })
+      const r = await routeToCarpark(from, { lat: cp.lat, lng: cp.lng })
       cp.distanceM = r.distanceMeters
       cp.etaS = r.durationSeconds
     } catch {}

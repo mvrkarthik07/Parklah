@@ -20,7 +20,7 @@ export default function ResultsView() {
     const q = params.get('q') || ''
     async function fetchResults() {
       setLoading(true)
-      const res = await api.get('/carparks/search', { params: { q } })
+      const res = await api.get('/carparks/search', { params: { q, radiusM: 15000 } })
       if (res.status >= 200 && res.status < 300) {
         const data = res.data
         setCarparks(data.data.carparks)

@@ -29,33 +29,9 @@ export async function routeToCarpark(
   from: { lat: number; lng: number },
   to: { lat: number; lng: number }
 ): Promise<{ distanceMeters: number; durationSeconds: number }> {
-  if (env.USE_MOCK) {
-    const beeline = haversineMeters(from, to)
-    const road = beeline * 1.3
-    const eta = Math.round(road / (30/3.6))
-    return { distanceMeters: Math.round(road), durationSeconds: eta }
-  }
-
-  try {
-    const token = await getOneMapToken()
-    const url =
-      `https://www.onemap.gov.sg/api/public/routingsvc/route?` +
-      `start=${from.lat},${from.lng}&end=${to.lat},${to.lng}&routeType=drive`
-
-    const res = await fetch(url, { headers: { Authorization: token } })
-    if (!res.ok) throw new Error(`Routing failed: ${res.status}`)
-
-    const data = (await res.json()) as OneMapRouteResp
-    const s = data.route_summary
-    if (!s) throw new Error('Missing route_summary')
-
-    return { distanceMeters: s.total_distance, durationSeconds: s.total_time }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    console.error('[RouteOneMap] fallback to haversine:', msg)
-    const beeline = haversineMeters(from, to)
-    const road = beeline * 1.3
-    const eta = Math.round(road / (30/3.6))
-    return { distanceMeters: Math.round(road), durationSeconds: eta }
-  }
+  // Always use lightweight local fallback for performance and no external deps
+  const beeline = haversineMeters(from, to)
+  const road = beeline * env.ROUTE_FALLBACK_ROAD_FACTOR
+  const eta = Math.round(road / (env.ROUTE_FALLBACK_SPEED_KMH/3.6))
+  return { distanceMeters: Math.round(road), durationSeconds: eta }
 }

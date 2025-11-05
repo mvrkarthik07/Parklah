@@ -20,18 +20,23 @@ async function getOneMapToken(): Promise<string> {
 }
 
 export async function normalizeLocation(q: string) {
-  const token = await getOneMapToken()
-  const url =
-    `https://www.onemap.gov.sg/api/common/elastic/search?` +
-    `searchVal=${encodeURIComponent(q)}&returnGeom=Y&getAddrDetails=Y&pageNum=1`
-  const r = await fetch(url, { headers: { Authorization: token } })
-  if (!r.ok) throw new Error(`OneMap search failed: ${r.status}`)
-  const j = (await r.json()) as OneMapSearchResp
-  const first = j.results && j.results[0]
-  if (!first) throw new Error('No geocode results')
-  return {
-    lat: parseFloat(first.LATITUDE),
-    lng: parseFloat(first.LONGITUDE),
-    address: first.ADDRESS,
+  try {
+    const token = await getOneMapToken()
+    const url =
+      `https://www.onemap.gov.sg/api/common/elastic/search?` +
+      `searchVal=${encodeURIComponent(q)}&returnGeom=Y&getAddrDetails=Y&pageNum=1`
+    const r = await fetch(url, { headers: { Authorization: token } })
+    if (!r.ok) throw new Error(`OneMap search failed: ${r.status}`)
+    const j = (await r.json()) as OneMapSearchResp
+    const first = j.results && j.results[0]
+    if (!first) throw new Error('No geocode results')
+    return {
+      lat: parseFloat(first.LATITUDE),
+      lng: parseFloat(first.LONGITUDE),
+      address: first.ADDRESS,
+    }
+  } catch (_) {
+    // Fallback: center of Singapore when OneMap auth/search is unavailable
+    return { lat: 1.3521, lng: 103.8198, address: q }
   }
 }

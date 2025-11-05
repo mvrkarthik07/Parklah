@@ -11,18 +11,29 @@ export default function SearchView() {
   const [carparks, setCarparks] = useState<Carpark[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [origin, setOrigin] = useState<Center | null>(null)
 
   // auto-focus the input
   useEffect(() => {
     const el = document.getElementById('q') as HTMLInputElement | null
     el?.focus()
+    // try to get a quick origin for better distance/ETA in search
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => setOrigin({ lat: coords.latitude, lng: coords.longitude }),
+        () => {},
+        { enableHighAccuracy: false, timeout: 3000, maximumAge: 60000 }
+      )
+    }
   }, [])
 
-  async function runSearch(query: string, radiusM = 2000) {
+  async function runSearch(query: string, radiusM = 15000) {
     setLoading(true)
     setError(null)
     try {
-      const res = await api.get('/carparks/search', { params: { q: query, radiusM: 5000 } })
+      const params: any = { q: query, radiusM }
+      if (origin) { params.originLat = origin.lat; params.originLng = origin.lng }
+      const res = await api.get('/carparks/search', { params })
      
       
       setCenter(res.data.data.center)
@@ -62,7 +73,7 @@ export default function SearchView() {
       try {
         // 3️⃣ Send request to backend
         const res = await api.get('/carparks/near', {
-          params: { lat, lng, radiusM: 3000 },
+          params: { lat, lng, radiusM: 15000 },
         })
 
         // 4️⃣ Validate response and update map/list
@@ -70,6 +81,7 @@ export default function SearchView() {
 
         setCenter(res.data.data.center)
         setCarparks(res.data.data.carparks || [])
+        setOrigin({ lat, lng })
       } catch (e: any) {
         console.error('Locate me error:', e)
         setError(e?.message || 'Near search failed')
@@ -115,6 +127,27 @@ export default function SearchView() {
           className="px-4 py-2 rounded bg-gray-800 text-white"
         >
           Locate me
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            setLoading(true)
+            setError(null)
+            try {
+              const res = await api.get('/carparks/all')
+              if (!res.data?.ok) throw new Error(res.data?.error || 'All fetch failed')
+              setCenter(res.data.data.center)
+              setCarparks(res.data.data.carparks || [])
+            } catch (e: any) {
+              setError(e?.message || 'All fetch failed')
+              setCarparks([])
+            } finally {
+              setLoading(false)
+            }
+          }}
+          className="px-4 py-2 rounded bg-gray-600 text-white"
+        >
+          Show all
         </button>
       </form>
 
