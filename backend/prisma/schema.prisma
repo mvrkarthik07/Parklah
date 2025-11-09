@@ -9,14 +9,18 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  profile      Profile?
-  favorites    Favorite[]
-  queries      QueryLog[]
+  id               String   @id @default(cuid())
+  email            String   @unique
+  passwordHash     String
+  twoFactorSecret  String?
+  twoFactorEnabled Boolean  @default(false)
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  profile          Profile?
+  favorites        Favorite[]
+  queries          QueryLog[]
 }
 
 model Profile {

@@ -19,6 +19,22 @@ import {
 import { getAvailabilityMap } from '../adapters/HDBAvailability'
 import { env } from '../config/env'
 
+function directDistanceMeters(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number }
+) {
+  const latToM = 111_000
+  const lngToM = (lat: number) => 111_000 * Math.cos((lat * Math.PI) / 180)
+  const dx = (to.lng - from.lng) * lngToM(from.lat)
+  const dy = (to.lat - from.lat) * latToM
+  return Math.hypot(dx, dy)
+}
+
+function estimateEtaSeconds(distanceM: number) {
+  const speedMS = (env.ROUTE_FALLBACK_SPEED_KMH ?? 30) / 3.6
+  return Math.round(distanceM / Math.max(speedMS, 1))
+}
+
 // ---------------------------
 // Utility helpers
 // ---------------------------
@@ -70,12 +86,27 @@ export async function searchCarparks(
   const centroid = centroidOfMeta(matches)
   if (centroid) {
     center = centroid
+    // If we found specific matches, use a tighter radius for focused results
+    if (matches.length > 0 && matches.length < 50) {
+      radiusM = Math.min(radiusM, 5000) // Cap at 5km for specific matches
+    }
   } else {
     center = { lat: 1.3521, lng: 103.8198 } // fallback: SG center
   }
 
   // step 2: find nearby carparks
   let candidates: Carpark[] = await nearbyCarparks(center, radiusM)
+  
+  // If we had text matches, prioritize them in results
+  if (matches.length > 0) {
+    const matchIds = new Set(matches.map((m) => m.id))
+    candidates.sort((a, b) => {
+      const aMatch = matchIds.has(a.id) ? 1 : 0
+      const bMatch = matchIds.has(b.id) ? 1 : 0
+      if (aMatch !== bMatch) return bMatch - aMatch
+      return (a.distanceM ?? 0) - (b.distanceM ?? 0)
+    })
+  }
   // Cap work: only route the closest N to keep response fast
   const ROUTE_LIMIT = 200
   if (candidates.length > ROUTE_LIMIT) candidates = candidates.slice(0, ROUTE_LIMIT)
@@ -100,7 +131,11 @@ export async function searchCarparks(
       const r = await routeToCarpark(from, { lat: cp.lat, lng: cp.lng })
       cp.distanceM = r.distanceMeters
       cp.etaS = r.durationSeconds
-    } catch {}
+    } catch {
+      const fallback = directDistanceMeters(from, cp)
+      cp.distanceM = fallback
+      cp.etaS = estimateEtaSeconds(fallback)
+    }
   }
 
   // step 5: rank results
@@ -150,7 +185,11 @@ export async function searchCarparksByCoords(
       const r = await routeToCarpark(center, { lat: cp.lat, lng: cp.lng })
       cp.distanceM = r.distanceMeters
       cp.etaS = r.durationSeconds
-    } catch {}
+    } catch {
+      const fallback = directDistanceMeters(center, cp)
+      cp.distanceM = fallback
+      cp.etaS = estimateEtaSeconds(fallback)
+    }
   }
 
   const ranked = rankCarparks(candidates, lotKey)

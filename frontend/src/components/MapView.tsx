@@ -6,14 +6,25 @@ import markerIcon from 'leaflet/dist/images/marker-icon.png?url'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png?url'
 import 'leaflet/dist/leaflet.css'
 import type { Carpark } from '../lib/ranking'
+import { getAvailabilityLines } from '../utils/availability'
+import { formatDistance, formatEta } from '../utils/format'
 
-type Props = { lat: number; lng: number; carparks: Carpark[] }
+type Props = { 
+  lat: number; 
+  lng: number; 
+  carparks: Carpark[]; 
+  selectedCarpark?: Carpark | null
+  userLocation?: { lat: number; lng: number } | null
+  onCarparkSelect?: (carpark: Carpark) => void
+}
 
-export default function MapView({ lat, lng, carparks }: Props) {
+export default function MapView({ lat, lng, carparks, selectedCarpark, userLocation, onCarparkSelect }: Props) {
   const mapRef = useRef<L.Map | null>(null)
   const layerRef = useRef<L.FeatureGroup | null>(null)
   const userRef = useRef<L.CircleMarker | null>(null)
+  const selectedRef = useRef<L.CircleMarker | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const markerRadius = 8
 
   // init once
   useEffect(() => {
@@ -40,27 +51,33 @@ export default function MapView({ lat, lng, carparks }: Props) {
     }
   }, [])
 
-  // recenter when lat/lng change
+  // recenter when lat/lng change (only if no carparks and no carpark selected)
   useEffect(() => {
-    if (mapRef.current) {
-      mapRef.current.setView([lat, lng], 14)
+    if (mapRef.current && !selectedCarpark && carparks.length === 0) {
+      // Only recenter if there are no carparks to show
+      mapRef.current.setView([lat, lng], 14, { animate: true })
     }
-    // draw/update user location marker
-    if (mapRef.current) {
+  }, [lat, lng, selectedCarpark, carparks.length])
+
+  // Always show user location marker when available
+  useEffect(() => {
+    if (!mapRef.current) return
+    const userPos = userLocation || (lat && lng ? { lat, lng } : null)
+    if (userPos) {
       if (!userRef.current) {
-        userRef.current = L.circleMarker([lat, lng], {
+        userRef.current = L.circleMarker([userPos.lat, userPos.lng], {
           radius: 10,
           color: '#0ea5e9',
           weight: 3,
           fillColor: '#38bdf8',
-          fillOpacity: 0.6,
+          fillOpacity: 0.8,
         }).addTo(mapRef.current)
         userRef.current.bindPopup('<b>You are here</b>')
       } else {
-        userRef.current.setLatLng([lat, lng])
+        userRef.current.setLatLng([userPos.lat, userPos.lng])
       }
     }
-  }, [lat, lng])
+  }, [userLocation, lat, lng])
 
   // markers
   useEffect(() => {
@@ -90,23 +107,67 @@ export default function MapView({ lat, lng, carparks }: Props) {
       }
       const pos: L.LatLngExpression = [lat0, lng0]
       points.push(pos)
+      const isSelected = selectedCarpark?.id === c.id
       // Use circle markers to avoid any icon asset issues
-      L.circleMarker(pos, {
-        radius: 8,
-        color: '#e11d48',
-        weight: 2,
-        fillColor: '#ef4444',
-        fillOpacity: 0.95,
+      const marker = L.circleMarker(pos, {
+        radius: markerRadius,
+        color: isSelected ? '#2563eb' : '#e11d48',
+        weight: isSelected ? 2 : 2,
+        fillColor: isSelected ? '#3b82f6' : '#ef4444',
+        fillOpacity: isSelected ? 0.9 : 0.9,
       })
-        .bindPopup(`
-          <b>${c.name}</b><br/>
-          ${c.address}<br/>
-          ${c.fee?.weekday ? `Weekday: ${c.fee.weekday}<br/>` : ''}
-          ${c.fee?.saturday ? `Sat: ${c.fee.saturday}<br/>` : ''}
-          ${c.fee?.sundayPH ? `Sun/PH: ${c.fee.sundayPH}<br/>` : ''}
-          ${c.fee?.freeParking ? `Free parking: ${c.fee.freeParking}` : ''}
-        `)
+      
+      const availabilityLines = getAvailabilityLines(c.lotAvailability).slice(0, 2)
+      const availabilityHtml = availabilityLines.length
+        ? availabilityLines
+            .map((line) => `<span style=\"display:block;color:#475569;\">${line}</span>`)
+            .join('')
+        : '<span style="display:block;color:#94a3b8;">Availability data unavailable</span>'
+      const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+        `${c.lat},${c.lng}`
+      )}`
+
+      const popupContent = `
+        <div style="min-width:170px;font-family:system-ui,-apple-system,sans-serif;font-size:11px;line-height:1.4;color:#1f2937;">
+          <div style="display:flex;justify-content:space-between;align-items-center;margin-bottom:2px;">
+            <strong style="font-size:12px;">${c.name}</strong>
+            <button data-close-popup style="border:none;background:transparent;color:#64748b;font-size:14px;cursor:pointer;padding:0;" aria-label="Close">×</button>
+          </div>
+          ${c.distanceM ? `<span style=\"display:block;color:#475569;\">${formatDistance(c.distanceM)} · ${formatEta(c.etaS)}</span>` : ''}
+          ${c.carparkType ? `<span style=\"display:block;color:#475569;margin-top:2px;\">Type: ${c.carparkType}</span>` : ''}
+          <div style="margin-top:4px;">${availabilityHtml}</div>
+          <a href="${googleMapsUrl}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;padding:4px 8px;border-radius:6px;background:#2563eb;color:#fff;text-decoration:none;font-size:10px;">Navigate</a>
+        </div>
+      `
+
+      marker
+        .bindPopup(popupContent, {
+          closeButton: false,
+          offset: L.point(0, -markerRadius),
+          autoPan: true,
+          className: 'carpark-mini-popup',
+        })
+        .on('click', () => {
+          if (onCarparkSelect) {
+            onCarparkSelect(c)
+          }
+          marker.openPopup()
+        })
+        .on('popupopen', (evt) => {
+          const container = evt.popup.getElement()
+          if (!container) return
+          const closeBtn = container.querySelector('[data-close-popup]') as HTMLButtonElement | null
+          if (closeBtn) {
+            closeBtn.onclick = () => {
+              evt.popup.close()
+            }
+          }
+        })
         .addTo(layerRef.current)
+      
+      if (isSelected) {
+        marker.openPopup()
+      }
     }
     // force size recalculation after rendering markers
     if (mapRef.current) {
@@ -114,17 +175,41 @@ export default function MapView({ lat, lng, carparks }: Props) {
     }
     // debug count
     console.debug('[MapView] markers added:', points.length)
-    // Fit map to show all markers if any
-    if (points.length === 1) {
-      const [p] = points
-      mapRef.current.setView(p as L.LatLngExpression, 16)
-    } else if (layerRef.current && (layerRef.current as any).getBounds && points.length > 0) {
-      const bounds = layerRef.current.getBounds()
-      if (bounds.isValid()) {
-        mapRef.current.fitBounds(bounds.pad(0.1))
+    
+    // Zoom behavior: only fit bounds if no carpark is selected
+    if (selectedCarpark) {
+      // If a carpark is selected, zoom to it (don't reset)
+      const selected = carparks.find((c) => c.id === selectedCarpark.id)
+      if (selected && typeof selected.lat === 'number' && typeof selected.lng === 'number') {
+        if (mapRef.current) {
+          mapRef.current.setView([selected.lat, selected.lng], 16, { animate: true })
+        }
       }
+    } else if (points.length > 0) {
+      // If no selection, fit all markers with a slight delay to ensure smooth update
+      setTimeout(() => {
+        if (!selectedCarpark && mapRef.current) {
+          if (points.length === 1) {
+            const [p] = points
+            mapRef.current.setView(p as L.LatLngExpression, 16, { animate: true })
+          } else if (layerRef.current && (layerRef.current as any).getBounds) {
+            const bounds = layerRef.current.getBounds()
+            if (bounds.isValid()) {
+              mapRef.current.fitBounds(bounds.pad(0.1), { animate: true })
+            }
+          }
+        }
+      }, 150)
     }
-  }, [carparks])
+  }, [carparks, selectedCarpark])
 
-  return <div ref={containerRef} className="h-[60vh] w-full rounded" />
+  const recenterToUser = () => {
+    if (userLocation && mapRef.current) {
+      mapRef.current.setView([userLocation.lat, userLocation.lng], 16, { animate: true })
+    }
+  }
+
+  return (
+    <div className="relative h-[60vh] w-full rounded" ref={containerRef}></div>
+  )
 }

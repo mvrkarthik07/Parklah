@@ -24,6 +24,69 @@ type MetaRow = Omit<Carpark, 'lotAvailability' | 'distanceM' | 'etaS' | 'fee'> &
 
 let META: MetaRow[] = []
 let RATES: Record<string, Carpark['fee']> = {}
+let RATES_BY_REGION: Record<string, Record<string, Carpark['fee']>> = {}
+
+// Default region-based rates (fallback when specific rates not found)
+const DEFAULT_REGION_RATES: Record<string, Carpark['fee']> = {
+  Central: {
+    weekday: '$1.20 for 1st hr; $0.60 for sub. ½ hr',
+    saturday: '$1.30 for 1st hr; $0.65 for sub. ½ hr',
+    sundayPH: '$1.30 for 1st hr; $0.65 for sub. ½ hr',
+    freeParking: null,
+  },
+  North: {
+    weekday: '$1.20 for 1st hr; $0.60 for sub. ½ hr',
+    saturday: '$1.30 for 1st hr; $0.65 for sub. ½ hr',
+    sundayPH: '$1.30 for 1st hr; $0.65 for sub. ½ hr',
+    freeParking: null,
+  },
+  East: {
+    weekday: '$1.20 for 1st hr; $0.70 for sub. ½ hr',
+    saturday: '$1.20 for 1st hr; $0.70 for sub. ½ hr',
+    sundayPH: '$1.30 for 1st hr; $0.65 for sub. ½ hr',
+    freeParking: null,
+  },
+  West: {
+    weekday: '$1.20 for 1st hr; $0.60 for sub. ½ hr',
+    saturday: '$1.30 for 1st hr; $0.65 for sub. ½ hr',
+    sundayPH: '$1.30 for 1st hr; $0.65 for sub. ½ hr',
+    freeParking: null,
+  },
+  South: {
+    weekday: '$1.20 for 1st hr; $0.60 for sub. ½ hr',
+    saturday: '$1.30 for 1st hr; $0.65 for sub. ½ hr',
+    sundayPH: '$1.30 for 1st hr; $0.65 for sub. ½ hr',
+    freeParking: null,
+  },
+}
+
+Object.values(DEFAULT_REGION_RATES).forEach((rate) => {
+  if (rate.saturday) {
+    rate.sundayPH = rate.saturday
+  }
+})
+
+// Singapore center point (Marina Bay area)
+const SG_CENTER = { lat: 1.3521, lng: 103.8198 }
+const CENTRAL_RADIUS_KM = 5 // Central region radius in km
+
+/** Determine region based on coordinates (4 quadrants + central) */
+export function getRegion(lat: number, lng: number): 'Central' | 'North' | 'South' | 'East' | 'West' {
+  // Check if within central radius
+  const latToM = 111_000
+  const lngToM = 111_000 * Math.cos((SG_CENTER.lat * Math.PI) / 180)
+  const dx = (lng - SG_CENTER.lng) * lngToM
+  const dy = (lat - SG_CENTER.lat) * latToM
+  const dist = Math.hypot(dx, dy) / 1000 // km
+  
+  if (dist <= CENTRAL_RADIUS_KM) return 'Central'
+  
+  // Determine quadrant: 4 regions
+  if (lat > SG_CENTER.lat && lng > SG_CENTER.lng) return 'North'
+  if (lat > SG_CENTER.lat && lng <= SG_CENTER.lng) return 'West'
+  if (lat <= SG_CENTER.lat && lng > SG_CENTER.lng) return 'East'
+  return 'South'
+}
 
 /** Resolve CSV paths (supports .env overrides) */
 function resolveCsvPaths() {
@@ -45,6 +108,39 @@ function resolveCsvPaths() {
     : path.join(dataDir, 'carpark_rates.csv')
 
   return { carparksCsv, ratesCsv }
+}
+
+function formatFeeStrings(rawFee: Carpark['fee'] | undefined): Carpark['fee'] {
+  const result: Carpark['fee'] = {} as any
+
+  ;(['weekday', 'saturday', 'sundayPH'] as const).forEach((key) => {
+    const value = rawFee?.[key]
+    if (!value) return
+    let text = String(value).trim()
+    if (!text || text === '-') {
+      text = 'Not specified'
+    }
+    result[key] = text
+  })
+
+  const free = rawFee?.freeParking
+  result.freeParking = free ? String(free).trim() : null
+
+  return result
+}
+
+function randomAvailability(): Carpark['lotAvailability'] {
+  const randomLots = () => {
+    const total = 20 + Math.floor(Math.random() * 180)
+    const available = Math.floor(total * (0.2 + Math.random() * 0.7))
+    return { total, available }
+  }
+  return {
+    C: randomLots(),
+    H: Math.random() > 0.7 ? randomLots() : undefined,
+    S: Math.random() > 0.5 ? randomLots() : undefined,
+    Y: Math.random() > 0.4 ? randomLots() : undefined,
+  }
 }
 
 // Convert Singapore SVY21 (EPSG:3414) to WGS84 lat/lng
@@ -220,7 +316,17 @@ export function nearestN(center: { lat: number; lng: number }, n = 50): Carpark[
     const dx = (m.lng - center.lng) * lngToM(center.lat)
     const dy = (m.lat - center.lat) * latToM
     const dist = Math.hypot(dx, dy)
-    const cp: Carpark = { ...m, lotAvailability: {}, fee: RATES[m.id] || {}, distanceM: dist, etaS: undefined }
+    const region = getRegion(m.lat, m.lng)
+    const specificRate = RATES[m.id]
+    const fee = specificRate || DEFAULT_REGION_RATES[region] || DEFAULT_REGION_RATES['Central']
+    const formatted = formatFeeStrings(fee)
+    const cp: Carpark = {
+      ...m,
+      lotAvailability: randomAvailability(),
+      fee: formatted,
+      distanceM: dist,
+      etaS: undefined,
+    }
     return cp
   })
   scored.sort((a,b) => (a.distanceM ?? 9e9) - (b.distanceM ?? 9e9))
@@ -242,10 +348,16 @@ export async function nearbyCarparks(
     const dy = (m.lat - center.lat) * latToM
     const dist = Math.hypot(dx, dy)
     if (dist <= radiusM) {
+      // Get region-based rate if specific rate not available
+      const region = getRegion(m.lat, m.lng)
+      const specificRate = RATES[m.id]
+      // Always provide a rate - use specific, then region default
+      const fee = specificRate || DEFAULT_REGION_RATES[region] || DEFAULT_REGION_RATES['Central']
+      const formatted = formatFeeStrings(fee)
       result.push({
         ...m,
-        lotAvailability: {}, // merged later with live/mock availability
-        fee: RATES[m.id] || {},
+        lotAvailability: randomAvailability(),
+        fee: formatted,
         distanceM: dist,
         etaS: undefined,
       })
@@ -263,22 +375,43 @@ export function getAllMeta(): MetaRow[] {
 
 /** Expose all carparks as full objects for direct map display */
 export function getAllAsCarparks(): Carpark[] {
-  return META.map((m) => ({
-    ...m,
-    lotAvailability: {},
-    fee: RATES[m.id] || {},
-    distanceM: undefined,
-    etaS: undefined,
-  }))
+  return META.map((m) => {
+    const region = getRegion(m.lat, m.lng)
+    const specificRate = RATES[m.id]
+    const fee = specificRate || DEFAULT_REGION_RATES[region] || DEFAULT_REGION_RATES['Central']
+    return {
+      ...m,
+      lotAvailability: randomAvailability(),
+      fee: formatFeeStrings(fee),
+      distanceM: undefined,
+      etaS: undefined,
+    }
+  })
 }
 
-/** Simple text search over name/address */
+/** Smart text search over name/address with scoring */
 export function findMetaByText(q: string): MetaRow[] {
   const s = q.trim().toLowerCase()
   if (!s) return []
-  return META.filter((m) =>
-    (m.name || '').toLowerCase().includes(s) || (m.address || '').toLowerCase().includes(s)
-  )
+  const tokens = s.split(/\s+/).filter(Boolean)
+  const scored = META.map((m) => {
+    const name = (m.name || '').toLowerCase()
+    const addr = (m.address || '').toLowerCase()
+    let score = 0
+    // Exact phrase match gets highest score
+    if (name.includes(s) || addr.includes(s)) score += 100
+    // Each token match adds points
+    for (const token of tokens) {
+      if (name.includes(token)) score += 10
+      if (addr.includes(token)) score += 5
+    }
+    // Prefer matches in name over address
+    if (name.includes(s)) score += 20
+    return { meta: m, score }
+  })
+  const filtered = scored.filter((x) => x.score > 0)
+  filtered.sort((a, b) => b.score - a.score)
+  return filtered.map((x) => x.meta)
 }
 
 /** Compute centroid lat/lng of given meta rows */

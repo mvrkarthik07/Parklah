@@ -27,10 +27,12 @@ export default function Register() {
       if (res.status >= 200 && res.status < 300) {
         navigate('/login')
       } else {
-        setError('Registration failed')
+        setError(res.data?.error?.message || 'Registration failed')
       }
-    } catch {
-      setError('Registration failed. Try again later.')
+    } catch (e: any) {
+      const errorMsg = e?.response?.data?.error?.message || e?.message || 'Registration failed. Try again later.'
+      setError(errorMsg)
+      console.error('Registration error:', e)
     }
   }
 
@@ -76,7 +78,8 @@ export default function Register() {
           >
             <option value="CAR">Car</option>
             <option value="MOTORCYCLE">Motorcycle</option>
-            <option value="TRUCK">Truck</option>
+            <option value="MOTORCYCLE_WITH_SIDECAR">Motorcycle with Sidecar</option>
+            <option value="HEAVY">Heavy Vehicle</option>
           </select>
         </div>
 

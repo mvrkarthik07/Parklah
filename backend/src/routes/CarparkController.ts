@@ -8,7 +8,7 @@ const r = Router()
 r.get('/search', async (req, res) => {
   try {
     const q = String(req.query.q ?? '').trim()
-    const radiusM = req.query.radiusM ? parseInt(String(req.query.radiusM), 10) : 15000
+    const radiusM = req.query.radiusM ? parseInt(String(req.query.radiusM), 10) : 8000
     if (!q) return res.status(400).json({ ok: false, error: 'Missing query' })
 
     const originLat = req.query.originLat ? parseFloat(String(req.query.originLat)) : undefined

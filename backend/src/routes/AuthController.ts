@@ -1,30 +1,134 @@
 import { Router } from 'express'
-import { register, login, me } from '../services/AuthService'
+import { VehicleType } from '@prisma/client'
+import {
+  register,
+  login,
+  me,
+  verify2FA,
+  setup2FA,
+  enable2FA,
+  disable2FA,
+  getCurrent2FACode,
+  requestPasswordReset,
+  resetPassword,
+} from '../services/AuthService'
 import { ok, err } from '../utils/http'
+import { authGuard } from '../middlewares/authGuard'
 const r = Router()
 r.post('/register', async (req, res) => {
 try {
 const { email, password, vehicleType, vehicleHeight } = req.body
-const { user, token } = await register(email, password, vehicleType,
-vehicleHeight)
+const type = String(vehicleType || '').toUpperCase() as VehicleType
+if (!Object.values(VehicleType).includes(type)) {
+  throw new Error('Invalid vehicle type')
+}
+const height = Number(vehicleHeight)
+if (!Number.isFinite(height) || height <= 0) {
+  throw new Error('Invalid vehicle height')
+}
+const { user, token } = await register(email.trim(), password, type,
+height)
 res.cookie('access_token', token, { httpOnly: true, sameSite: 'strict',
 secure: false })
 res.json(ok({ id: user.id, email: user.email }))
 } catch (e:any) { res.status(400).json(err(e.message)) }
-28
 })
 r.post('/login', async (req, res) => {
 try {
-const { email, password } = req.body
-const { user, token } = await login(email, password)
-res.cookie('access_token', token, { httpOnly: true, sameSite: 'strict',
-secure: false })
+const { email, password, rememberMe } = req.body
+const remember = Boolean(rememberMe)
+const result = await login(email.trim(), password)
+if (result.requires2FA) {
+  return res.json(ok({
+    requires2FA: true,
+    email: result.user.email,
+    rememberMe: remember,
+    twoFactorDemoCode: result.twoFactorDemo?.code || null,
+    twoFactorDemoExpiresIn: result.twoFactorDemo?.expiresIn || null,
+  }))
+}
+const cookieOptions: any = { httpOnly: true, sameSite: 'strict', secure: false }
+if (remember) {
+  cookieOptions.maxAge = 1000 * 60 * 60 * 24 * 30 // 30 days
+}
+res.cookie('access_token', result.token, cookieOptions)
+res.json(ok({ id: result.user.id, email: result.user.email, profile: result.user.profile, requires2FA: false }))
+} catch (e:any) { res.status(400).json(err(e.message)) }
+})
+
+r.post('/verify-2fa', async (req, res) => {
+try {
+const { email, token, rememberMe } = req.body
+const remember = Boolean(rememberMe)
+const { user, token: jwtToken } = await verify2FA(email.trim(), token)
+const cookieOptions: any = { httpOnly: true, sameSite: 'strict', secure: false }
+if (remember) {
+  cookieOptions.maxAge = 1000 * 60 * 60 * 24 * 30
+}
+res.cookie('access_token', jwtToken, cookieOptions)
 res.json(ok({ id: user.id, email: user.email, profile: user.profile }))
 } catch (e:any) { res.status(400).json(err(e.message)) }
 })
+
+r.post('/request-reset', async (req, res) => {
+try {
+const { email } = req.body
+const result = await requestPasswordReset(email)
+res.json(ok(result))
+} catch (e:any) { res.status(400).json(err(e.message)) }
+})
+
+r.post('/reset-password', async (req, res) => {
+try {
+const { email, token, password } = req.body
+if (!password || password.length < 8) {
+  throw new Error('Password must be at least 8 characters long')
+}
+const result = await resetPassword(email, token, password)
+res.json(ok(result))
+} catch (e:any) { res.status(400).json(err(e.message)) }
+})
+
+r.get('/setup-2fa', authGuard, async (req, res) => {
+try {
+const uid = (req as any).user?.uid
+if (!uid) return res.status(401).json(err('unauth'))
+const { secret, qrCodeUrl } = await setup2FA(uid)
+res.json(ok({ secret, qrCodeUrl }))
+} catch (e:any) { res.status(400).json(err(e.message)) }
+})
+
+r.post('/enable-2fa', authGuard, async (req, res) => {
+try {
+const uid = (req as any).user?.uid
+if (!uid) return res.status(401).json(err('unauth'))
+const { secret, token } = req.body
+const result = await enable2FA(uid, secret, token)
+res.json(ok(result))
+} catch (e:any) { res.status(400).json(err(e.message)) }
+})
+
+r.post('/disable-2fa', authGuard, async (req, res) => {
+try {
+const uid = (req as any).user?.uid
+if (!uid) return res.status(401).json(err('unauth'))
+const result = await disable2FA(uid)
+res.json(ok(result))
+} catch (e:any) { res.status(400).json(err(e.message)) }
+})
+
+r.get('/demo-2fa-code', authGuard, async (req, res) => {
+try {
+const uid = (req as any).user?.uid
+if (!uid) return res.status(401).json(err('unauth'))
+const demo = await getCurrent2FACode(uid)
+res.json(ok(demo))
+} catch (e:any) { res.status(400).json(err(e.message)) }
+})
+
 r.post('/logout', (req, res) => { res.clearCookie('access_token');
 res.json(ok(true)) })
-r.get('/me', async (req, res) => {
+r.get('/me', authGuard, async (req, res) => {
 try {
 const uid = (req as any).user?.uid
 if (!uid) return res.status(401).json(err('unauth'))
