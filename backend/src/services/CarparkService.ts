@@ -6,7 +6,6 @@
  *   between user and carparks.
  */
 
-// OneMap geocoding disabled; we use local centroid or a static fallback
 import { routeToCarpark } from '../adapters/RouteOneMap'
 import {
   initCarparkMetaFromCsv,
@@ -68,7 +67,7 @@ export function rankCarparks(items: Carpark[], lotKey: keyof Carpark['lotAvailab
 
 /**
  * Search carparks by text query (e.g., "choa chu kang").
- * 1. Geocode to coordinates via OneMap.
+ * 1. Match text against CSV carpark names/addresses to find search center.
  * 2. Find nearby carparks within radius.
  * 3. Rank results by distance & price.
  */
