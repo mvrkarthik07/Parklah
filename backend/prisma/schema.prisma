@@ -4,8 +4,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"            // <- MUST be a literal for local dev
-  url      = env("DATABASE_URL") // e.g. file:./dev.db
+  provider = "postgresql"         // PostgreSQL for production (Railway)
+  url      = env("DATABASE_URL")  // For Railway: postgresql://... For local: file:./dev.db
 }
 
 model User {
