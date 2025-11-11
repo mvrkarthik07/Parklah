@@ -16,8 +16,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await api.get('/auth/me')
       setIsAuthenticated(true)
-    } catch {
-      setIsAuthenticated(false)
+    } catch (error: any) {
+      // 401 is expected when not logged in, don't treat it as an error
+      if (error?.response?.status === 401) {
+        setIsAuthenticated(false)
+      } else {
+        // Other errors (network, etc.) - assume not authenticated
+        setIsAuthenticated(false)
+      }
     }
   }, [])
 
