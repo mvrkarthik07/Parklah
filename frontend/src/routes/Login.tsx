@@ -9,7 +9,7 @@ import { useAuthContext } from '../lib/AuthContext'
 
 export default function Login() {
   const navigate = useNavigate()
-  const { setAuthenticated } = useAuthContext()
+  const { setAuthenticated, refreshAuth } = useAuthContext()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [twoFactorCode, setTwoFactorCode] = useState('')
@@ -27,7 +27,12 @@ export default function Login() {
         setRequires2FA(true)
       } else {
         setAuthenticated(true)
-        navigate('/')
+        // Wait a bit for cookie to be set, then refresh auth and navigate
+        setTimeout(() => {
+          refreshAuth().then(() => {
+            navigate('/')
+          })
+        }, 100)
       }
     } catch (e: any) {
       const errorMsg = e?.response?.data?.error?.message || 'Invalid email or password'
@@ -41,7 +46,12 @@ export default function Login() {
     try {
       await api.post('/auth/verify-2fa', { email, token: twoFactorCode, rememberMe })
       setAuthenticated(true)
-      navigate('/')
+      // Wait a bit for cookie to be set, then refresh auth and navigate
+      setTimeout(() => {
+        refreshAuth().then(() => {
+          navigate('/')
+        })
+      }, 100)
     } catch (e: any) {
       const errorMsg = e?.response?.data?.error?.message || 'Invalid 2FA code'
       setError(errorMsg)

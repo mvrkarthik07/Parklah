@@ -13,13 +13,18 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Clear any stale auth state
+      // Don't redirect if we're already on login/register page or if it's the /auth/me check
       if (typeof window !== 'undefined') {
-        // Don't redirect if we're already on login/register page
         const path = window.location.pathname
-        if (path !== '/login' && path !== '/register' && path !== '/forgot-password' && path !== '/reset-password') {
-          // Only redirect if not already on auth pages
-          window.location.href = '/login'
+        const isAuthPage = path === '/login' || path === '/register' || path === '/forgot-password' || path === '/reset-password'
+        const isAuthCheck = error.config?.url?.includes('/auth/me')
+        
+        // Only redirect if not on auth pages and not checking auth status
+        if (!isAuthPage && !isAuthCheck) {
+          // Small delay to avoid race conditions
+          setTimeout(() => {
+            window.location.href = '/login'
+          }, 100)
         }
       }
     }
