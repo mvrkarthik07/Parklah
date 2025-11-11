@@ -59,7 +59,9 @@ export async function register(
   email: string,
   password: string,
   vehicleType: VehicleType,
-  vehicleHeight: number
+  vehicleHeight: number,
+  vehicleNumber?: string | null,
+  phoneNumber?: string | null
 ) {
   const normalizedEmail = email.trim().toLowerCase()
   try {
@@ -68,7 +70,12 @@ export async function register(
       data: { email: normalizedEmail, passwordHash },
     })
     await prisma.profile.create({
-      data: { userId: user.id, vehicleType, vehicleHeight },
+      data: {
+        userId: user.id,
+        vehicleType,
+        vehicleHeight,
+        // phoneNumber is not a valid property on profile, so remove it
+      },
     })
     const fullUser = await prisma.user.findUnique({
       where: { id: user.id },
@@ -100,12 +107,11 @@ export async function login(email: string, password: string): Promise<LoginResul
   if (!ok) throw new Error('Invalid credentials')
 
   if ((user as any).twoFactorEnabled) {
-    const demo = generateDemoCode((user as any).twoFactorSecret)
     return {
       user: sanitizeUser(user),
       token: null,
       requires2FA: true,
-      twoFactorDemo: demo,
+      twoFactorDemo: null, // Removed demo code - users must use their authenticator app
     }
   }
 

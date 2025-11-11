@@ -2,3 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 html, body, #root { height: 100%; }
+
+/* Custom pin icons - static size, no scaling with zoom */
+.custom-pin-icon {
+  background: transparent !important;
+  border: none !important;
+  width: 14px !important; /* Even smaller size */
+  height: 18px !important; /* Even smaller size */
+}
+
+.custom-pin-icon svg {
+  display: block;
+  pointer-events: none;
+}
+
+/* Custom focus ring color for auth pages */
+input:focus,
+select:focus {
+  --tw-ring-color: #272645 !important;
+}

@@ -16,21 +16,15 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState('')
   const [requires2FA, setRequires2FA] = useState(false)
-  const [twoFactorDemoCode, setTwoFactorDemoCode] = useState<string | null>(null)
-  const [twoFactorDemoExpiresIn, setTwoFactorDemoExpiresIn] = useState<number | null>(null)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
-    setTwoFactorDemoCode(null)
-    setTwoFactorDemoExpiresIn(null)
     try {
       const res = await api.post('/auth/login', { email, password, rememberMe })
       const data = res.data.data
       if (data.requires2FA) {
         setRequires2FA(true)
-        setTwoFactorDemoCode(data.twoFactorDemoCode ?? null)
-        setTwoFactorDemoExpiresIn(data.twoFactorDemoExpiresIn ?? null)
       } else {
         setAuthenticated(true)
         navigate('/')
@@ -56,30 +50,22 @@ export default function Login() {
 
   if (requires2FA) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      <div className="min-h-[70vh] flex items-center justify-center" style={{ backgroundColor: '#272645' }}>
         <div className="w-full max-w-md bg-white/95 backdrop-blur rounded-2xl shadow-xl p-8 space-y-6">
           <h2 className="text-2xl font-bold text-center text-slate-900">Two-Factor Authentication</h2>
           <p className="text-sm text-gray-600 text-center">
-            Enter the 6-digit code from your authenticator app to continue.
+            Enter the 6-digit code from your authenticator app (Google Authenticator, Authy, etc.) to continue.
           </p>
-          {twoFactorDemoCode && (
-            <div className="rounded-lg border border-dashed border-blue-400 bg-blue-50 px-4 py-3 text-center">
-              <p className="text-sm text-blue-600 font-medium">Demo code (would be sent via email/SMS):</p>
-              <p className="text-3xl font-semibold tracking-widest text-blue-700 mt-1">{twoFactorDemoCode}</p>
-              {twoFactorDemoExpiresIn && (
-                <p className="text-xs text-blue-500 mt-1">Expires in ~{twoFactorDemoExpiresIn}s</p>
-              )}
-            </div>
-          )}
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
           <form onSubmit={handle2FAVerify} className="space-y-4">
             <div>
-              <label htmlFor="twoFactorCode" className="block font-medium mb-1">2FA Code</label>
+              <label htmlFor="twoFactorCode" className="block font-medium mb-1 text-slate-700">2FA Code</label>
               <input
                 id="twoFactorCode"
                 type="text"
                 placeholder="000000"
-                className="w-full border rounded-lg p-3 text-center text-2xl tracking-widest"
+                className="w-full border rounded-lg p-3 text-center text-2xl tracking-widest focus:ring-2 focus:outline-none"
+                style={{ '--tw-ring-color': '#272645' } as React.CSSProperties & { '--tw-ring-color'?: string }}
                 value={twoFactorCode}
                 onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 maxLength={6}
@@ -88,7 +74,7 @@ export default function Login() {
               />
             </div>
             <div className="flex items-center justify-between text-sm">
-              <label className="inline-flex items-center gap-2">
+              <label className="inline-flex items-center gap-2 text-slate-700">
                 <input
                   type="checkbox"
                   checked={rememberMe}
@@ -109,7 +95,8 @@ export default function Login() {
             </div>
             <button
               type="submit"
-              className="w-full bg-slate-900 text-white py-3 rounded-lg font-semibold shadow hover:bg-slate-700"
+              className="w-full text-white py-3 rounded-lg font-semibold shadow hover:opacity-90 transition-opacity"
+              style={{ backgroundColor: '#272645' }}
             >
               Verify & Continue
             </button>
@@ -120,8 +107,8 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-[70vh] flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <div className="w-full max-w-md bg-white/95 backdrop-blur rounded-2xl shadow-xl p-8 space-y-6">
+    <div className="min-h-[70vh] flex items-center justify-center p-4" style={{ backgroundColor: '#272645' }}>
+      <div className="w-full max-w-md bg-white/95 backdrop-blur rounded-xl sm:rounded-2xl shadow-xl p-6 sm:p-8 space-y-5 sm:space-y-6">
         <div className="text-center space-y-2">
           <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
           <p className="text-sm text-gray-600">
@@ -138,7 +125,8 @@ export default function Login() {
               id="email"
               type="email"
               placeholder="you@example.com"
-              className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-slate-900 focus:outline-none"
+              className="w-full border rounded-lg p-3 focus:ring-2 focus:outline-none"
+              style={{ '--tw-ring-color': '#272645' } as React.CSSProperties}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -152,7 +140,8 @@ export default function Login() {
               id="password"
               type="password"
               placeholder="Enter your password"
-              className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-slate-900 focus:outline-none"
+              className="w-full border rounded-lg p-3 focus:ring-2 focus:outline-none"
+              style={{ '--tw-ring-color': '#272645' } as React.CSSProperties}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -167,22 +156,24 @@ export default function Login() {
               />
               Remember me for 30 days
             </label>
-            <Link to="/forgot-password" className="text-slate-900 font-semibold hover:underline">
+            <Link to="/forgot-password" className="font-semibold hover:underline" style={{ color: '#272645' }}>
               Forgot password?
             </Link>
           </div>
           <button
             type="submit"
-            className="w-full bg-slate-900 text-white py-3 rounded-lg font-semibold shadow hover:bg-slate-700"
+            className="w-full text-white py-3 rounded-lg font-semibold shadow hover:opacity-90 transition-opacity"
+            style={{ backgroundColor: '#272645' }}
           >
             Sign in
           </button>
         </form>
         <p className="text-center text-sm text-gray-600">
-          Don’t have an account?{' '}
+          Don't have an account?{' '}
           <button
             onClick={() => navigate('/register')}
-            className="text-slate-900 font-semibold hover:underline"
+            className="font-semibold hover:underline"
+            style={{ color: '#272645' }}
           >
             Register here
           </button>

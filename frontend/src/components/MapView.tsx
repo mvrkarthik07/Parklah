@@ -24,7 +24,26 @@ export default function MapView({ lat, lng, carparks, selectedCarpark, userLocat
   const userRef = useRef<L.CircleMarker | null>(null)
   const selectedRef = useRef<L.CircleMarker | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const markerRadius = 8
+  
+  // Create Google Maps-style pin icon
+  const createPinIcon = (isSelected: boolean) => {
+    const color = isSelected ? '#2563eb' : '#e11d48'
+    
+    return L.divIcon({
+      className: 'custom-pin-icon',
+      html: `
+        <div style="position: relative; width: 0; height: 0;">
+          <svg width="14" height="18" viewBox="0 0 32 40" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
+            <path d="M16 0C7.163 0 0 7.163 0 16c0 11.5 16 24 16 24s16-12.5 16-24C32 7.163 24.837 0 16 0z" fill="${color}" stroke="#fff" stroke-width="1.5"/>
+            <circle cx="16" cy="16" r="5" fill="#fff"/>
+          </svg>
+        </div>
+      `,
+      iconSize: [14, 18],
+      iconAnchor: [7, 18],
+      popupAnchor: [0, -18],
+    })
+  }
 
   // init once
   useEffect(() => {
@@ -41,8 +60,9 @@ export default function MapView({ lat, lng, carparks, selectedCarpark, userLocat
     })
     if (!mapRef.current && containerRef.current) {
       mapRef.current = L.map(containerRef.current).setView([lat, lng], 14)
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
+      // Default to satellite map
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; Esri &mdash; Source: Esri, Maxar, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community',
         maxZoom: 19,
       }).addTo(mapRef.current)
       // Ensure tiles render if container sizing changed recently
@@ -108,13 +128,9 @@ export default function MapView({ lat, lng, carparks, selectedCarpark, userLocat
       const pos: L.LatLngExpression = [lat0, lng0]
       points.push(pos)
       const isSelected = selectedCarpark?.id === c.id
-      // Use circle markers to avoid any icon asset issues
-      const marker = L.circleMarker(pos, {
-        radius: markerRadius,
-        color: isSelected ? '#2563eb' : '#e11d48',
-        weight: isSelected ? 2 : 2,
-        fillColor: isSelected ? '#3b82f6' : '#ef4444',
-        fillOpacity: isSelected ? 0.9 : 0.9,
+      // Use Google Maps-style pin markers
+      const marker = L.marker(pos, {
+        icon: createPinIcon(isSelected),
       })
       
       const availabilityLines = getAvailabilityLines(c.lotAvailability).slice(0, 2)
@@ -143,7 +159,7 @@ export default function MapView({ lat, lng, carparks, selectedCarpark, userLocat
       marker
         .bindPopup(popupContent, {
           closeButton: false,
-          offset: L.point(0, -markerRadius),
+          offset: L.point(0, -10),
           autoPan: true,
           className: 'carpark-mini-popup',
         })
@@ -210,6 +226,20 @@ export default function MapView({ lat, lng, carparks, selectedCarpark, userLocat
   }
 
   return (
-    <div className="relative h-[60vh] w-full rounded" ref={containerRef}></div>
+    <div className="relative h-[50vh] sm:h-[55vh] md:h-[60vh] w-full rounded-lg overflow-hidden shadow-md" ref={containerRef}>
+      {/* User location button - bottom right */}
+      {userLocation && (
+        <button
+          onClick={recenterToUser}
+          className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 z-[1000] p-2.5 sm:p-3 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors"
+          aria-label="Center map on my location"
+        >
+          <svg className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
+      )}
+    </div>
   )
 }

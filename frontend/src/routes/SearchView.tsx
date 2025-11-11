@@ -200,6 +200,8 @@ export default function SearchView() {
             etaS: computeEtaSeconds(distance),
           }
         })
+        // Sort by distance (closest first)
+        list.sort((a, b) => (a.distanceM ?? 9e9) - (b.distanceM ?? 9e9))
         original.current = list
         setCenter(location)
         setCarparks(applyLocalFilters(list, filters))
@@ -219,6 +221,13 @@ export default function SearchView() {
     preloadAll()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Re-apply filters when they change (if we have carparks loaded)
+  useEffect(() => {
+    if (original.current.length > 0) {
+      setCarparks(applyLocalFilters(original.current, filters))
+    }
+  }, [filters])
 
   async function runSearch(query: string, radiusM = 8000) {
     setLoading(true)
@@ -240,10 +249,10 @@ export default function SearchView() {
       }
       const res = await api.get('/carparks/search', { params })
      
-      
+      const rawList = res.data.data.carparks || []
+      original.current = rawList
       setCenter(res.data.data.center)
-      setCarparks(res.data.data.carparks || [])
-      original.current = res.data.data.carparks || []
+      setCarparks(applyLocalFilters(rawList, filters))
       setIsShowingAll(false)
     } catch (e: any) {
       setError(e?.message || 'Search failed')
@@ -280,7 +289,7 @@ export default function SearchView() {
       try {
         // 3️⃣ Send request to backend
         const res = await api.get('/carparks/near', {
-          params: { lat, lng, radiusM: 15000 },
+          params: { lat, lng, radiusM: 4000 },
         })
 
         // 4️⃣ Validate response and update map/list
@@ -335,36 +344,38 @@ export default function SearchView() {
 
   return (
     <>
-    <div className="mx-auto w-full max-w-6xl p-4 space-y-4">
-      <h1 className="text-xl font-semibold">Find a Carpark</h1>
+    <div className="mx-auto w-full space-y-3 sm:space-y-4">
+      <h1 className="text-lg sm:text-xl lg:text-2xl font-semibold text-slate-900">Find a Carpark</h1>
 
-      <form onSubmit={handleSubmit} className="flex flex-wrap gap-2">
+      <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2 sm:gap-2">
         <input
           id="q"
           name="q"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          className="flex-1 border rounded px-3 py-2"
+          className="flex-1 min-w-0 border border-slate-300 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
           placeholder="e.g., Choa Chu Kang, Punggol Waterway, NTU"
           aria-label="Search location"
         />
-        <button
-          type="submit"
-          className="px-4 py-2 rounded bg-blue-600 text-white disabled:opacity-50"
-          disabled={loading}
-        >
-          {loading ? 'Searching…' : 'Search'}
-        </button>
-        <button
-          type="button"
-          onClick={handleLocateMe}
-          className="px-4 py-2 rounded bg-gray-800 text-white"
-        >
-          Locate me
-        </button>
-        <button
-          type="button"
-          onClick={async () => {
+        <div className="flex gap-2 sm:flex-shrink-0">
+          <button
+            type="submit"
+            className="flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg bg-blue-600 text-white text-sm sm:text-base font-medium disabled:opacity-50 hover:bg-blue-700 transition-colors"
+            disabled={loading}
+          >
+            {loading ? 'Searching…' : 'Search'}
+          </button>
+          <button
+            type="button"
+            onClick={handleLocateMe}
+            className="flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg bg-gray-800 text-white text-sm sm:text-base font-medium hover:bg-gray-900 transition-colors"
+          >
+            <span className="hidden sm:inline">Locate me</span>
+            <span className="sm:hidden">📍</span>
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
             setLoading(true)
             setError(null)
             try {
@@ -382,6 +393,8 @@ export default function SearchView() {
                   etaS: computeEtaSeconds(distance),
                 }
               })
+              // Sort by distance (closest first)
+              list.sort((a, b) => (a.distanceM ?? 9e9) - (b.distanceM ?? 9e9))
               original.current = list
               setCenter(location)
               setCarparks(applyLocalFilters(list, filters))
@@ -397,26 +410,29 @@ export default function SearchView() {
               setLoading(false)
             }
           }}
-          className="px-4 py-2 rounded bg-gray-600 text-white"
+          className="flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg bg-gray-600 text-white text-sm sm:text-base font-medium hover:bg-gray-700 transition-colors"
         >
-          Show all carparks
+          <span className="hidden sm:inline">Show all carparks</span>
+          <span className="sm:hidden">All</span>
         </button>
+        </div>
       </form>
 
-      {error && <div className="text-red-600 text-sm">{error}</div>}
+      {error && <div className="text-red-600 text-xs sm:text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
         <button
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100"
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs sm:text-sm hover:bg-slate-100 transition-colors"
           onClick={() => setShowFilters(true)}
         >
-          Filters
+          <span>Filters</span>
+          {summaryText && <span className="hidden sm:inline text-slate-500">({carparks.length})</span>}
         </button>
-        {summaryText && <p className="text-xs text-slate-500">{summaryText}</p>}
+        {summaryText && <p className="text-xs sm:text-sm text-slate-500 truncate">{summaryText}</p>}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="space-y-4 min-w-0">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="space-y-3 sm:space-y-4 min-w-0 order-2 lg:order-1">
           {/* Map needs a real height or it will be invisible */}
           {center ? (
             <MapView
@@ -428,32 +444,34 @@ export default function SearchView() {
               onCarparkSelect={setSelectedCarpark}
             />
           ) : (
-            <div className="h-[60vh] w-full rounded bg-gray-100 grid place-items-center text-gray-600">
-              No map yet — search or click “Locate me”
+            <div className="h-[50vh] sm:h-[60vh] w-full rounded-lg bg-gray-100 grid place-items-center text-gray-600 text-sm sm:text-base">
+              No map yet — search or click "Locate me"
             </div>
           )}
         </div>
 
-        <div className="space-y-4 min-w-0 lg:max-h-[60vh] lg:overflow-y-auto lg:pr-1">
+        <div className="space-y-3 sm:space-y-4 min-w-0 order-1 lg:order-2 lg:max-h-[60vh] lg:overflow-y-auto lg:pr-1">
           <WeatherWidget
-            className="hidden md:block"
+            className="hidden sm:block"
             userLocation={storedLocation}
-            searchQuery={q}
           />
 
           {selectedCarpark ? (
-            <div className="border rounded-lg p-4 bg-white shadow-sm space-y-3 max-h-[28rem] overflow-y-auto">
-              <button
-                onClick={() => setSelectedCarpark(null)}
-                className="ml-auto block text-gray-500 hover:text-gray-700"
-                type="button"
-              >
-                ×
-              </button>
-              <h2 className="text-lg font-semibold text-slate-900 break-words">{selectedCarpark.name}</h2>
-              <p className="text-sm text-gray-600">{selectedCarpark.address}</p>
+            <div className="border border-slate-200 rounded-lg p-3 sm:p-4 bg-white shadow-sm space-y-3 max-h-[50vh] sm:max-h-[28rem] overflow-y-auto">
+              <div className="flex items-start justify-between gap-2">
+                <h2 className="text-base sm:text-lg font-semibold text-slate-900 break-words flex-1">{selectedCarpark.name}</h2>
+                <button
+                  onClick={() => setSelectedCarpark(null)}
+                  className="text-gray-500 hover:text-gray-700 shrink-0 text-xl leading-none"
+                  type="button"
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="text-xs sm:text-sm text-gray-600">{selectedCarpark.address}</p>
 
-              <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 text-xs sm:text-sm text-slate-600">
                 <div>
                   <p className="font-semibold text-slate-800">Distance</p>
                   <p>{formatDistance(selectedCarpark.distanceM)}</p>
@@ -522,43 +540,43 @@ export default function SearchView() {
         </div>
       </div>
 
-      <div className="space-y-2 rounded-lg border border-slate-200 bg-white/80 p-4 shadow-sm">
+      <div className="space-y-2 rounded-lg border border-slate-200 bg-white/80 p-3 sm:p-4 shadow-sm">
         {carparks.length === 0 ? (
-          <p className="text-sm text-gray-600">No results</p>
+          <p className="text-xs sm:text-sm text-gray-600 text-center py-4">No results found</p>
         ) : (
           <ul className="space-y-2">
             {carparks.map((c) => (
               <li
                 key={c.id}
                 onClick={() => setSelectedCarpark(c)}
-                className={`border rounded-lg p-3 flex flex-col gap-2 cursor-pointer transition-colors md:flex-row md:items-start md:justify-between ${
+                className={`border rounded-lg p-2.5 sm:p-3 flex flex-col gap-2 cursor-pointer transition-colors sm:flex-row sm:items-start sm:justify-between ${
                   selectedCarpark?.id === c.id
                     ? 'bg-blue-50 border-blue-300'
-                    : 'hover:bg-gray-50'
+                    : 'hover:bg-gray-50 border-slate-200'
                 }`}
               >
-                <div className="space-y-2 min-w-0">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <p className="font-semibold text-slate-800 truncate">{c.name}</p>
+                <div className="space-y-1.5 sm:space-y-2 min-w-0 flex-1">
+                  <div className="flex items-start sm:items-center gap-2 min-w-0">
+                    <p className="font-semibold text-sm sm:text-base text-slate-800 truncate">{c.name}</p>
                     <a
                       href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${c.lat},${c.lng}`)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-blue-600 hover:underline shrink-0"
+                      className="text-xs text-blue-600 hover:underline shrink-0 whitespace-nowrap"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      Navigate
+                      Navigate →
                     </a>
                   </div>
-                  <p className="text-xs text-gray-600 truncate">{c.address}</p>
+                  <p className="text-xs sm:text-sm text-gray-600 truncate">{c.address}</p>
                   <p className="text-xs text-gray-500">
-                    Distance: {formatDistance(c.distanceM)} · ETA: {formatEta(c.etaS)}
+                    📍 {formatDistance(c.distanceM)} · ⏱️ {formatEta(c.etaS)}
                   </p>
                   <div className="text-xs text-slate-600">
-                    <p className="font-semibold text-slate-700">Availability</p>
+                    <p className="font-semibold text-slate-700 mb-1">Availability</p>
                     {getAvailabilityLines(c.lotAvailability).length > 0 ? (
-                      <ul className="mt-1 space-y-1">
-                        {getAvailabilityLines(c.lotAvailability).map((line) => (
+                      <ul className="mt-1 space-y-0.5">
+                        {getAvailabilityLines(c.lotAvailability).slice(0, 2).map((line) => (
                           <li key={`${c.id}-${line}`} className="flex items-center gap-1">
                             <span aria-hidden>•</span>
                             <span className="truncate">{line}</span>
@@ -570,10 +588,11 @@ export default function SearchView() {
                     )}
                   </div>
                 </div>
-                <div className="text-xs text-gray-500 space-y-1 text-left md:text-right shrink-0">
-                  <p>Weekday: {c.fee?.weekday || '—'}</p>
-                  <p>Sat: {c.fee?.saturday || '—'}</p>
-                  <p>Sun/PH: {c.fee?.sundayPH || '—'}</p>
+                <div className="text-xs text-gray-500 space-y-1 text-left sm:text-right shrink-0 border-t sm:border-t-0 sm:border-l pt-2 sm:pt-0 sm:pl-3 sm:ml-3">
+                  <p className="font-medium text-slate-700 mb-1 sm:mb-0.5">Rates</p>
+                  <p className="truncate">Weekday: {c.fee?.weekday || '—'}</p>
+                  <p className="truncate">Sat: {c.fee?.saturday || '—'}</p>
+                  <p className="truncate">Sun/PH: {c.fee?.sundayPH || '—'}</p>
                 </div>
               </li>
             ))}
@@ -583,10 +602,21 @@ export default function SearchView() {
     </div>
 
     <WeatherWidget
-      className="md:hidden mt-4 mx-auto w-full max-w-6xl px-4"
+      className="sm:hidden mt-4"
       userLocation={storedLocation}
-      searchQuery={q}
     />
+
+    {showFilters && (
+      <FilterModal
+        initialFilters={filters}
+        onApply={(newFilters) => {
+          setFilters(newFilters)
+          setCarparks(applyLocalFilters(original.current, newFilters))
+          setShowFilters(false)
+        }}
+        onClose={() => setShowFilters(false)}
+      />
+    )}
     </>
   )
 }
@@ -603,8 +633,14 @@ function FilterModal({
   const [draft, setDraft] = useState<Filters>(initialFilters)
 
   return (
-    <div className="fixed inset-0 z-[2000] bg-black/40 flex items-center justify-center px-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl p-6 space-y-6">
+    <div 
+      className="fixed inset-0 z-[2000] bg-black/40 flex items-center justify-center p-3 sm:p-4"
+      onClick={onClose}
+    >
+      <div 
+        className="w-full max-w-lg rounded-xl sm:rounded-2xl bg-white shadow-xl p-4 sm:p-6 space-y-4 sm:space-y-6 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900">Filter carparks</h2>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-700">×</button>

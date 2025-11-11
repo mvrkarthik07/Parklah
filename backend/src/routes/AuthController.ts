@@ -17,7 +17,7 @@ import { authGuard } from '../middlewares/authGuard'
 const r = Router()
 r.post('/register', async (req, res) => {
 try {
-const { email, password, vehicleType, vehicleHeight } = req.body
+const { email, password, vehicleType, vehicleHeight, vehicleNumber, phoneNumber } = req.body
 const type = String(vehicleType || '').toUpperCase() as VehicleType
 if (!Object.values(VehicleType).includes(type)) {
   throw new Error('Invalid vehicle type')
@@ -26,8 +26,14 @@ const height = Number(vehicleHeight)
 if (!Number.isFinite(height) || height <= 0) {
   throw new Error('Invalid vehicle height')
 }
-const { user, token } = await register(email.trim(), password, type,
-height)
+const { user, token } = await register(
+  email.trim(),
+  password,
+  type,
+  height,
+  vehicleNumber || null,
+  phoneNumber || null
+)
 res.cookie('access_token', token, { httpOnly: true, sameSite: 'strict',
 secure: false })
 res.json(ok({ id: user.id, email: user.email }))
@@ -43,8 +49,6 @@ if (result.requires2FA) {
     requires2FA: true,
     email: result.user.email,
     rememberMe: remember,
-    twoFactorDemoCode: result.twoFactorDemo?.code || null,
-    twoFactorDemoExpiresIn: result.twoFactorDemo?.expiresIn || null,
   }))
 }
 const cookieOptions: any = { httpOnly: true, sameSite: 'strict', secure: false }

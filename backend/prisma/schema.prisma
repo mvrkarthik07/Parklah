@@ -28,6 +28,8 @@ model Profile {
   userId        String   @unique
   vehicleType   VehicleType
   vehicleHeight Float
+  vehicleNumber String?
+  phoneNumber   String?
   user          User     @relation(fields: [userId], references: [id])
 }
 

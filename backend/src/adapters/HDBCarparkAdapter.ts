@@ -389,29 +389,92 @@ export function getAllAsCarparks(): Carpark[] {
   })
 }
 
-/** Smart text search over name/address with scoring */
+/** Enhanced smart text search with improved fuzzy matching and scoring */
 export function findMetaByText(q: string): MetaRow[] {
   const s = q.trim().toLowerCase()
   if (!s) return []
-  const tokens = s.split(/\s+/).filter(Boolean)
+  
+  // Normalize query: remove common words, handle abbreviations
+  const normalizedQuery = s
+    .replace(/\b(street|st|road|rd|avenue|ave|drive|dr|lane|ln|way|blvd|boulevard)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  
+  const tokens = normalizedQuery.split(/\s+/).filter(Boolean)
+  const originalTokens = s.split(/\s+/).filter(Boolean)
+  
   const scored = META.map((m) => {
     const name = (m.name || '').toLowerCase()
     const addr = (m.address || '').toLowerCase()
+    const fullText = `${name} ${addr}`.toLowerCase()
     let score = 0
-    // Exact phrase match gets highest score
-    if (name.includes(s) || addr.includes(s)) score += 100
-    // Each token match adds points
-    for (const token of tokens) {
-      if (name.includes(token)) score += 10
-      if (addr.includes(token)) score += 5
+    
+    // 1. Exact phrase match (highest priority)
+    if (name === s || addr === s) {
+      score += 200
+    } else if (name.includes(s) || addr.includes(s)) {
+      score += 100
     }
-    // Prefer matches in name over address
-    if (name.includes(s)) score += 20
+    
+    // 2. Starts with query (very relevant)
+    if (name.startsWith(s) || addr.startsWith(s)) {
+      score += 80
+    }
+    
+    // 3. All tokens present (ordered match)
+    const allTokensMatch = tokens.every((token) => fullText.includes(token))
+    if (allTokensMatch) {
+      score += 60
+      // Bonus if tokens appear in order
+      const tokenOrder = tokens.map((t) => fullText.indexOf(t))
+      const isOrdered = tokenOrder.every((pos, i) => i === 0 || pos >= tokenOrder[i - 1])
+      if (isOrdered) score += 20
+    }
+    
+    // 4. Individual token matches
+    for (const token of originalTokens) {
+      if (token.length < 2) continue // Skip single characters
+      if (name.includes(token)) score += 15
+      if (addr.includes(token)) score += 8
+      // Bonus for word boundary matches
+      const wordBoundaryRegex = new RegExp(`\\b${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+      if (wordBoundaryRegex.test(name)) score += 10
+      if (wordBoundaryRegex.test(addr)) score += 5
+    }
+    
+    // 5. Fuzzy matching: check for similar strings (handles typos/abbreviations)
+    const queryWords = new Set(tokens)
+    const nameWords = new Set(name.split(/\s+/))
+    const addrWords = new Set(addr.split(/\s+/))
+    
+    // Count overlapping words
+    const nameOverlap = Array.from(queryWords).filter((w) => nameWords.has(w)).length
+    const addrOverlap = Array.from(queryWords).filter((w) => addrWords.has(w)).length
+    score += nameOverlap * 12
+    score += addrOverlap * 6
+    
+    // 6. Substring matches (partial words)
+    for (const token of tokens) {
+      if (token.length >= 3) {
+        // Check if token is a substring of any word in name/address
+        const nameHasSubstring = name.split(/\s+/).some((word) => word.includes(token))
+        const addrHasSubstring = addr.split(/\s+/).some((word) => word.includes(token))
+        if (nameHasSubstring) score += 5
+        if (addrHasSubstring) score += 3
+      }
+    }
+    
+    // 7. Prefer matches in name over address
+    if (name.includes(s)) score += 30
+    
     return { meta: m, score }
   })
+  
   const filtered = scored.filter((x) => x.score > 0)
   filtered.sort((a, b) => b.score - a.score)
-  return filtered.map((x) => x.meta)
+  
+  // Return top matches (limit to reasonable number)
+  return filtered.slice(0, 100).map((x) => x.meta)
 }
 
 /** Compute centroid lat/lng of given meta rows */

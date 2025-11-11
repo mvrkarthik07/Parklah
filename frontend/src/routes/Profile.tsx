@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import { useAuthContext } from '../lib/AuthContext'
 
@@ -6,6 +7,8 @@ type VehicleProfileResponse = {
   data?: {
     vehicleType: string
     vehicleHeight: number
+    vehicleNumber: string | null
+    phoneNumber: string | null
   }
 }
 
@@ -16,9 +19,12 @@ type MeResponse = {
 }
 
 export default function Profile() {
+  const navigate = useNavigate()
   const { refreshAuth } = useAuthContext()
   const [type, setType] = useState('CAR')
   const [height, setHeight] = useState(1.6)
+  const [vehicleNumber, setVehicleNumber] = useState('')
+  const [phoneNumber, setPhoneNumber] = useState('')
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
   const [qrCodeUrl, setQrCodeUrl] = useState('')
   const [setupCode, setSetupCode] = useState('')
@@ -26,7 +32,6 @@ export default function Profile() {
   const [showSetup, setShowSetup] = useState(false)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
-  const [demoCode, setDemoCode] = useState<{ code: string; expiresIn: number } | null>(null)
 
   useEffect(() => {
     ;(async () => {
@@ -35,6 +40,8 @@ export default function Profile() {
         if (profileRes.data?.data) {
           setType(profileRes.data.data.vehicleType)
           setHeight(profileRes.data.data.vehicleHeight)
+          setVehicleNumber(profileRes.data.data.vehicleNumber || '')
+          setPhoneNumber(profileRes.data.data.phoneNumber || '')
         }
       } catch (e) {
         console.error(e)
@@ -54,7 +61,11 @@ export default function Profile() {
 
   const save = async () => {
     setMessage('')
-    await api.put('/user/vehicle', { vehicleType: type, vehicleHeight: height })
+    await api.put('/user/vehicle', {
+      vehicleType: type,
+      vehicleHeight: height,
+      vehicleNumber: vehicleNumber.trim() || null,
+    })
     setMessage('Vehicle profile saved successfully.')
   }
 
@@ -104,15 +115,6 @@ export default function Profile() {
     }
   }
 
-  const fetchDemoCode = async () => {
-    setMessage('')
-    try {
-      const res = await api.get('/auth/demo-2fa-code')
-      setDemoCode(res.data.data)
-    } catch (e: any) {
-      alert(e?.response?.data?.error?.message || '2FA code unavailable')
-    }
-  }
 
   if (loading) {
     return (
@@ -123,10 +125,31 @@ export default function Profile() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <header>
-        <h1 className="text-3xl font-semibold text-slate-900">Profile & Security</h1>
-        <p className="text-sm text-slate-600 mt-1">
+        <div className="flex items-center gap-3 sm:gap-4 mb-2 sm:mb-3">
+          <button
+            onClick={() => navigate('/')}
+            className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg border border-slate-300 hover:bg-slate-100 transition-colors"
+            aria-label="Back to home"
+          >
+            <svg
+              className="w-4 h-4 sm:w-5 sm:h-5 text-slate-700"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+              />
+            </svg>
+          </button>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900">Profile & Security</h1>
+        </div>
+        <p className="text-xs sm:text-sm text-slate-600 mt-1">
           Manage your vehicle details and keep your account secured with two-factor authentication.
         </p>
       </header>
@@ -137,8 +160,8 @@ export default function Profile() {
         </div>
       )}
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-6 space-y-6">
+      <section className="grid gap-4 sm:gap-6 lg:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4 sm:p-6 space-y-4 sm:space-y-6">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Vehicle profile</h2>
             <p className="text-sm text-slate-500 mt-1">
@@ -172,6 +195,30 @@ export default function Profile() {
                 onChange={(e) => setHeight(parseFloat(e.target.value))}
               />
             </label>
+
+            <label className="block text-sm font-medium text-slate-700">
+              Vehicle Number
+              <input
+                type="text"
+                placeholder="e.g. SBA1234A"
+                className="mt-1 w-full rounded-lg border border-slate-200 p-3 focus:ring-2 focus:ring-slate-900 focus:outline-none"
+                value={vehicleNumber}
+                onChange={(e) => setVehicleNumber(e.target.value)}
+              />
+            </label>
+
+            <label className="block text-sm font-medium text-slate-700">
+              Phone Number
+              <input
+                type="tel"
+                placeholder="e.g. +65 9123 4567"
+                className="mt-1 w-full rounded-lg border border-slate-200 p-3 focus:ring-2 focus:ring-slate-900 focus:outline-none"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                disabled
+                title="Phone number can only be set during registration"
+              />
+            </label>
           </div>
 
           <button
@@ -182,9 +229,9 @@ export default function Profile() {
           </button>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-6 space-y-6">
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4 sm:p-6 space-y-4 sm:space-y-6">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Two-factor authentication</h2>
+            <h2 className="text-base sm:text-lg font-semibold text-slate-900">Two-factor authentication</h2>
             <p className="text-sm text-slate-500 mt-1">
               Add a second step (time-based code) to prove it&apos;s really you when signing in.
             </p>
@@ -201,27 +248,6 @@ export default function Profile() {
               >
                 Disable 2FA
               </button>
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-slate-800">Need a code?</h3>
-                <p className="text-sm text-slate-500">
-                  Tap the button below to simulate an email/SMS and view the current 2FA code (for demo purposes).
-                </p>
-                <button
-                  onClick={fetchDemoCode}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-100"
-                >
-                  Send me a demo 2FA code
-                </button>
-                {demoCode && (
-                  <div className="rounded-lg border border-dashed border-blue-400 bg-blue-50 px-4 py-3 text-center">
-                    <p className="text-sm text-blue-600 font-medium">Demo code:</p>
-                    <p className="text-3xl font-semibold tracking-widest text-blue-700 mt-1">
-                      {demoCode.code}
-                    </p>
-                    <p className="text-xs text-blue-500 mt-1">Expires in ~{demoCode.expiresIn}s</p>
-                  </div>
-                )}
-              </div>
             </div>
           ) : showSetup ? (
             <div className="space-y-5">

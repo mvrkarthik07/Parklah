@@ -6,7 +6,6 @@
  *   between user and carparks.
  */
 
-import { routeToCarpark } from '../adapters/RouteOneMap'
 import {
   initCarparkMetaFromCsv,
   nearbyCarparks,
@@ -16,6 +15,7 @@ import {
   type Lot,
 } from '../adapters/HDBCarparkAdapter'
 import { getAvailabilityMap } from '../adapters/HDBAvailability'
+import { geocodeLocation } from '../services/WeatherService'
 import { env } from '../config/env'
 
 function directDistanceMeters(
@@ -48,16 +48,26 @@ const feeScore = (f: Carpark['fee']) => {
   return pick ? parseFloat(pick[0]) : 999
 }
 
-/** Ranking by availability ratio, then fee, then distance, then ETA */
+/** Ranking by distance first (closest first), then availability, then fee, then ETA */
 export function rankCarparks(items: Carpark[], lotKey: keyof Carpark['lotAvailability'] = 'C') {
   return [...items].sort((a, b) => {
+    // Primary sort: distance (closest first)
+    const aDist = a.distanceM ?? 9e9
+    const bDist = b.distanceM ?? 9e9
+    if (aDist !== bDist) return aDist - bDist
+    
+    // Secondary sort: availability ratio (higher availability first)
     const ar = ratio(a.lotAvailability?.[lotKey])
     const br = ratio(b.lotAvailability?.[lotKey])
     if (br !== ar) return br - ar
+    
+    // Tertiary sort: fee score (cheaper first)
     const af = feeScore(a.fee)
     const bf = feeScore(b.fee)
     if (af !== bf) return af - bf
-    return (a.distanceM ?? 9e9) - (b.distanceM ?? 9e9) || (a.etaS ?? 9e9) - (b.etaS ?? 9e9)
+    
+    // Final sort: ETA (shorter ETA first)
+    return (a.etaS ?? 9e9) - (b.etaS ?? 9e9)
   })
 }
 
@@ -66,10 +76,13 @@ export function rankCarparks(items: Carpark[], lotKey: keyof Carpark['lotAvailab
 // ---------------------------
 
 /**
- * Search carparks by text query (e.g., "choa chu kang").
- * 1. Match text against CSV carpark names/addresses to find search center.
- * 2. Find nearby carparks within radius.
- * 3. Rank results by distance & price.
+ * Search carparks by text query (e.g., "choa chu kang", "tampines west", "NTU").
+ * Uses OpenStreetMap geocoding for precise location resolution, combined with
+ * CSV matching for better relevance.
+ * 1. Geocode query to precise coordinates via OpenStreetMap.
+ * 2. Also match against CSV carpark names/addresses for relevance.
+ * 3. Find nearby carparks within radius from geocoded center.
+ * 4. Rank results by distance & price.
  */
 export async function searchCarparks(
   q: string,
@@ -79,26 +92,50 @@ export async function searchCarparks(
 ) {
   initCarparkMetaFromCsv()
 
-  // step 1: derive search center (local-only)
+  // step 1: derive precise search center using geocoding + CSV matching
   let center: { lat: number; lng: number }
-  const matches = findMetaByText(q)
-  const centroid = centroidOfMeta(matches)
-  if (centroid) {
-    center = centroid
-    // If we found specific matches, use a tighter radius for focused results
-    if (matches.length > 0 && matches.length < 50) {
-      radiusM = Math.min(radiusM, 5000) // Cap at 5km for specific matches
+  let useGeocodedCenter = false
+  
+  // Try OpenStreetMap geocoding first for precise location
+  try {
+    const geocoded = await geocodeLocation(q)
+    center = geocoded
+    useGeocodedCenter = true
+    // For geocoded locations, use a tighter radius for focused results
+    radiusM = Math.min(radiusM, 5000)
+    console.log(`[CarparkService] Geocoded "${q}" to ${center.lat}, ${center.lng}`)
+  } catch (e) {
+    // Fallback to CSV matching if geocoding fails
+    console.log(`[CarparkService] Geocoding failed for "${q}", using CSV matching`)
+    const matches = findMetaByText(q)
+    const centroid = centroidOfMeta(matches)
+    if (centroid) {
+      center = centroid
+      // If we found specific matches, use a tighter radius
+      if (matches.length > 0 && matches.length < 50) {
+        radiusM = Math.min(radiusM, 5000)
+      }
+    } else {
+      center = { lat: 1.3521, lng: 103.8198 } // fallback: SG center
     }
-  } else {
-    center = { lat: 1.3521, lng: 103.8198 } // fallback: SG center
   }
+  
+  // Also get CSV matches for relevance boosting
+  const csvMatches = findMetaByText(q)
 
-  // step 2: find nearby carparks
+  // step 2: find nearby carparks from the precise center
   let candidates: Carpark[] = await nearbyCarparks(center, radiusM)
   
-  // If we had text matches, prioritize them in results
-  if (matches.length > 0) {
-    const matchIds = new Set(matches.map((m) => m.id))
+  // Boost relevance: prioritize CSV matches if they exist
+  if (csvMatches.length > 0) {
+    const matchIds = new Set(csvMatches.map((m) => m.id))
+    // Calculate distance from geocoded center for all candidates first
+    for (const cp of candidates) {
+      if (!cp.distanceM) {
+        cp.distanceM = directDistanceMeters(center, { lat: cp.lat, lng: cp.lng })
+      }
+    }
+    // Sort: CSV matches first, then by distance
     candidates.sort((a, b) => {
       const aMatch = matchIds.has(a.id) ? 1 : 0
       const bMatch = matchIds.has(b.id) ? 1 : 0
@@ -123,18 +160,14 @@ export async function searchCarparks(
     }
   }
 
-  // step 4: compute distance & ETA from user to carpark
+  // step 4: compute distance & ETA from user to carpark (optimized: direct calculation)
   const from = origin ?? center
   for (const cp of candidates) {
-    try {
-      const r = await routeToCarpark(from, { lat: cp.lat, lng: cp.lng })
-      cp.distanceM = r.distanceMeters
-      cp.etaS = r.durationSeconds
-    } catch {
-      const fallback = directDistanceMeters(from, cp)
-      cp.distanceM = fallback
-      cp.etaS = estimateEtaSeconds(fallback)
-    }
+    // Use direct haversine calculation (routeToCarpark is just haversine with road factor anyway)
+    const beeline = directDistanceMeters(from, cp)
+    const roadFactor = env.ROUTE_FALLBACK_ROAD_FACTOR ?? 1.3
+    cp.distanceM = Math.round(beeline * roadFactor)
+    cp.etaS = estimateEtaSeconds(cp.distanceM)
   }
 
   // step 5: rank results
@@ -179,16 +212,12 @@ export async function searchCarparksByCoords(
     }
   }
 
+  // Optimized: use direct haversine calculation instead of async routeToCarpark
   for (const cp of candidates) {
-    try {
-      const r = await routeToCarpark(center, { lat: cp.lat, lng: cp.lng })
-      cp.distanceM = r.distanceMeters
-      cp.etaS = r.durationSeconds
-    } catch {
-      const fallback = directDistanceMeters(center, cp)
-      cp.distanceM = fallback
-      cp.etaS = estimateEtaSeconds(fallback)
-    }
+    const beeline = directDistanceMeters(center, cp)
+    const roadFactor = env.ROUTE_FALLBACK_ROAD_FACTOR ?? 1.3
+    cp.distanceM = Math.round(beeline * roadFactor)
+    cp.etaS = estimateEtaSeconds(cp.distanceM)
   }
 
   const ranked = rankCarparks(candidates, lotKey)

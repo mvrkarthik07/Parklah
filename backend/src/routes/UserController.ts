@@ -11,8 +11,8 @@ res.json(ok(await getVehicle(uid)))
 })
 r.put('/vehicle', async (req, res) => {
 const uid = (req as any).user.uid
-const { vehicleType, vehicleHeight } = req.body
-res.json(ok(await setVehicle(uid, vehicleType, vehicleHeight)))
+const { vehicleType, vehicleHeight, vehicleNumber } = req.body
+res.json(ok(await setVehicle(uid, vehicleType, vehicleHeight, vehicleNumber)))
 })
 r.get('/favorites', async (req, res) => {
 const uid = (req as any).user.uid
