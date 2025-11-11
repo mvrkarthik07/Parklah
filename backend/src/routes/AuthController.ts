@@ -18,13 +18,19 @@ const r = Router()
 r.post('/register', async (req, res) => {
 try {
 const { email, password, vehicleType, vehicleHeight, vehicleNumber, phoneNumber } = req.body
+if (!email || !password) {
+  return res.status(400).json(err('Email and password are required'))
+}
+if (password.length < 8) {
+  return res.status(400).json(err('Password must be at least 8 characters'))
+}
 const type = String(vehicleType || '').toUpperCase() as VehicleType
 if (!Object.values(VehicleType).includes(type)) {
-  throw new Error('Invalid vehicle type')
+  return res.status(400).json(err('Invalid vehicle type'))
 }
 const height = Number(vehicleHeight)
 if (!Number.isFinite(height) || height <= 0) {
-  throw new Error('Invalid vehicle height')
+  return res.status(400).json(err('Invalid vehicle height'))
 }
 const { user, token } = await register(
   email.trim(),
@@ -34,14 +40,23 @@ const { user, token } = await register(
   vehicleNumber || null,
   phoneNumber || null
 )
-res.cookie('access_token', token, { httpOnly: true, sameSite: 'strict',
-secure: false })
+res.cookie('access_token', token, { 
+  httpOnly: true, 
+  sameSite: 'none', 
+  secure: true 
+})
 res.json(ok({ id: user.id, email: user.email }))
-} catch (e:any) { res.status(400).json(err(e.message)) }
+} catch (e:any) { 
+  console.error('Registration error:', e)
+  res.status(400).json(err(e.message || 'Registration failed')) 
+}
 })
 r.post('/login', async (req, res) => {
 try {
 const { email, password, rememberMe } = req.body
+if (!email || !password) {
+  return res.status(400).json(err('Email and password are required'))
+}
 const remember = Boolean(rememberMe)
 const result = await login(email.trim(), password)
 if (result.requires2FA) {
@@ -51,13 +66,20 @@ if (result.requires2FA) {
     rememberMe: remember,
   }))
 }
-const cookieOptions: any = { httpOnly: true, sameSite: 'strict', secure: false }
+const cookieOptions: any = { 
+  httpOnly: true, 
+  sameSite: 'none', 
+  secure: true 
+}
 if (remember) {
   cookieOptions.maxAge = 1000 * 60 * 60 * 24 * 30 // 30 days
 }
 res.cookie('access_token', result.token, cookieOptions)
 res.json(ok({ id: result.user.id, email: result.user.email, profile: result.user.profile, requires2FA: false }))
-} catch (e:any) { res.status(400).json(err(e.message)) }
+} catch (e:any) { 
+  console.error('Login error:', e)
+  res.status(400).json(err(e.message || 'Invalid email or password')) 
+}
 })
 
 r.post('/verify-2fa', async (req, res) => {
@@ -65,7 +87,11 @@ try {
 const { email, token, rememberMe } = req.body
 const remember = Boolean(rememberMe)
 const { user, token: jwtToken } = await verify2FA(email.trim(), token)
-const cookieOptions: any = { httpOnly: true, sameSite: 'strict', secure: false }
+const cookieOptions: any = { 
+  httpOnly: true, 
+  sameSite: 'none', 
+  secure: true 
+}
 if (remember) {
   cookieOptions.maxAge = 1000 * 60 * 60 * 24 * 30
 }
