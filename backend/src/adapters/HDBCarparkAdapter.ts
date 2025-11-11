@@ -129,17 +129,34 @@ function formatFeeStrings(rawFee: Carpark['fee'] | undefined): Carpark['fee'] {
   return result
 }
 
-function randomAvailability(): Carpark['lotAvailability'] {
-  const randomLots = () => {
-    const total = 20 + Math.floor(Math.random() * 180)
-    const available = Math.floor(total * (0.2 + Math.random() * 0.7))
+// Generate fixed availability based on carpark ID (consistent across refreshes)
+function fixedAvailability(carparkId: string): Carpark['lotAvailability'] {
+  // Simple hash function to convert ID to a number
+  let hash = 0
+  for (let i = 0; i < carparkId.length; i++) {
+    const char = carparkId.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32-bit integer
+  }
+  
+  // Use hash to generate consistent values
+  const seed1 = Math.abs(hash)
+  const seed2 = Math.abs(hash * 31)
+  const seed3 = Math.abs(hash * 17)
+  const seed4 = Math.abs(hash * 7)
+  
+  const fixedLots = (seed: number, minTotal: number, maxTotal: number, minPct: number, maxPct: number) => {
+    const total = minTotal + (seed % (maxTotal - minTotal + 1))
+    const pct = minPct + ((seed * 7) % Math.floor((maxPct - minPct) * 100)) / 100
+    const available = Math.floor(total * pct)
     return { total, available }
   }
+  
   return {
-    C: randomLots(),
-    H: Math.random() > 0.7 ? randomLots() : undefined,
-    S: Math.random() > 0.5 ? randomLots() : undefined,
-    Y: Math.random() > 0.4 ? randomLots() : undefined,
+    C: fixedLots(seed1, 20, 200, 0.2, 0.9),
+    H: (seed2 % 100) > 30 ? fixedLots(seed2, 10, 50, 0.3, 0.8) : undefined,
+    S: (seed3 % 100) > 50 ? fixedLots(seed3, 5, 30, 0.4, 0.9) : undefined,
+    Y: (seed4 % 100) > 60 ? fixedLots(seed4, 5, 40, 0.5, 0.9) : undefined,
   }
 }
 
@@ -322,7 +339,7 @@ export function nearestN(center: { lat: number; lng: number }, n = 50): Carpark[
     const formatted = formatFeeStrings(fee)
     const cp: Carpark = {
       ...m,
-      lotAvailability: randomAvailability(),
+      lotAvailability: fixedAvailability(m.id),
       fee: formatted,
       distanceM: dist,
       etaS: undefined,
@@ -356,7 +373,7 @@ export async function nearbyCarparks(
       const formatted = formatFeeStrings(fee)
       result.push({
         ...m,
-        lotAvailability: randomAvailability(),
+        lotAvailability: fixedAvailability(m.id),
         fee: formatted,
         distanceM: dist,
         etaS: undefined,
@@ -381,7 +398,7 @@ export function getAllAsCarparks(): Carpark[] {
     const fee = specificRate || DEFAULT_REGION_RATES[region] || DEFAULT_REGION_RATES['Central']
     return {
       ...m,
-      lotAvailability: randomAvailability(),
+      lotAvailability: fixedAvailability(m.id),
       fee: formatFeeStrings(fee),
       distanceM: undefined,
       etaS: undefined,
