@@ -10,7 +10,7 @@
     "prisma": "prisma",
     "postinstall": "prisma generate",
     "migrate": "prisma migrate deploy",
-    "start:prod": "prisma migrate deploy && node dist/index.js"
+    "start:prod": "prisma migrate deploy; node dist/index.js"
   },
   "dependencies": {
     "@prisma/client": "^6.16.3",
