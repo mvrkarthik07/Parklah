@@ -1,8 +1,12 @@
--- CreateEnum
-CREATE TYPE "VehicleType" AS ENUM ('CAR', 'HEAVY', 'MOTORCYCLE_WITH_SIDECAR', 'MOTORCYCLE');
+-- CreateEnum (only if not exists)
+DO $$ BEGIN
+    CREATE TYPE "VehicleType" AS ENUM ('CAR', 'HEAVY', 'MOTORCYCLE_WITH_SIDECAR', 'MOTORCYCLE');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
--- CreateTable
-CREATE TABLE "User" (
+-- CreateTable (with IF NOT EXISTS check)
+CREATE TABLE IF NOT EXISTS "User" (
     "id" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "passwordHash" TEXT NOT NULL,
@@ -17,7 +21,7 @@ CREATE TABLE "User" (
 );
 
 -- CreateTable
-CREATE TABLE "Profile" (
+CREATE TABLE IF NOT EXISTS "Profile" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "vehicleType" "VehicleType" NOT NULL,
@@ -29,7 +33,7 @@ CREATE TABLE "Profile" (
 );
 
 -- CreateTable
-CREATE TABLE "Favorite" (
+CREATE TABLE IF NOT EXISTS "Favorite" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "carparkId" TEXT NOT NULL,
@@ -40,7 +44,7 @@ CREATE TABLE "Favorite" (
 );
 
 -- CreateTable
-CREATE TABLE "QueryLog" (
+CREATE TABLE IF NOT EXISTS "QueryLog" (
     "id" TEXT NOT NULL,
     "userId" TEXT,
     "lat" DOUBLE PRECISION NOT NULL,
@@ -51,27 +55,34 @@ CREATE TABLE "QueryLog" (
     CONSTRAINT "QueryLog_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+-- CreateIndex (with IF NOT EXISTS)
+CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email");
+CREATE UNIQUE INDEX IF NOT EXISTS "User_resetToken_key" ON "User"("resetToken");
+CREATE UNIQUE INDEX IF NOT EXISTS "Profile_userId_key" ON "Profile"("userId");
+CREATE INDEX IF NOT EXISTS "Favorite_userId_idx" ON "Favorite"("userId");
+CREATE INDEX IF NOT EXISTS "QueryLog_userId_idx" ON "QueryLog"("userId");
 
--- CreateIndex
-CREATE UNIQUE INDEX "User_resetToken_key" ON "User"("resetToken");
-
--- CreateIndex
-CREATE UNIQUE INDEX "Profile_userId_key" ON "Profile"("userId");
-
--- CreateIndex
-CREATE INDEX "Favorite_userId_idx" ON "Favorite"("userId");
-
--- CreateIndex
-CREATE INDEX "QueryLog_userId_idx" ON "QueryLog"("userId");
-
--- AddForeignKey
-ALTER TABLE "Profile" ADD CONSTRAINT "Profile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Favorite" ADD CONSTRAINT "Favorite_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "QueryLog" ADD CONSTRAINT "QueryLog_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
+-- AddForeignKey (drop and recreate to avoid conflicts)
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'Profile_userId_fkey'
+    ) THEN
+        ALTER TABLE "Profile" ADD CONSTRAINT "Profile_userId_fkey" 
+            FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'Favorite_userId_fkey'
+    ) THEN
+        ALTER TABLE "Favorite" ADD CONSTRAINT "Favorite_userId_fkey" 
+            FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'QueryLog_userId_fkey'
+    ) THEN
+        ALTER TABLE "QueryLog" ADD CONSTRAINT "QueryLog_userId_fkey" 
+            FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+END $$;
