@@ -27,9 +27,10 @@ Railway makes deployment super easy. Follow these steps:
      ```
    - **Start Command**: 
      ```bash
-     cd backend && npm start
+     cd backend && npm run start:prod
      ```
-     ⚠️ **IMPORTANT**: If Root Directory is set, use `npm start`. If not, use `cd backend && npm start`
+     ⚠️ **This automatically runs migrations before starting!**
+     ⚠️ **Alternative**: If Root Directory is set, use `npm run start:prod`
 6. **Add Environment Variables:**
    - Click on your service → **Variables** tab
    - Add these variables:
