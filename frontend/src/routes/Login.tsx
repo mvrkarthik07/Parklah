@@ -4,7 +4,7 @@
  */
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import api from '../lib/api'
+import api, { saveToken } from '../lib/api'
 import { useAuthContext } from '../lib/AuthContext'
 
 export default function Login() {
@@ -26,13 +26,12 @@ export default function Login() {
       if (data.requires2FA) {
         setRequires2FA(true)
       } else {
+        // Save token to localStorage
+        if (res.data.data?.token) {
+          saveToken(res.data.data.token)
+        }
         setAuthenticated(true)
-        // Wait a bit for cookie to be set, then refresh auth and navigate
-        setTimeout(() => {
-          refreshAuth().then(() => {
-            navigate('/')
-          })
-        }, 100)
+        navigate('/')
       }
     } catch (e: any) {
       const errorMsg = e?.response?.data?.error?.message || 'Invalid email or password'
@@ -44,14 +43,13 @@ export default function Login() {
     e.preventDefault()
     setError('')
     try {
-      await api.post('/auth/verify-2fa', { email, token: twoFactorCode, rememberMe })
+      const res = await api.post('/auth/verify-2fa', { email, token: twoFactorCode, rememberMe })
+      // Save token to localStorage
+      if (res.data.data?.token) {
+        saveToken(res.data.data.token)
+      }
       setAuthenticated(true)
-      // Wait a bit for cookie to be set, then refresh auth and navigate
-      setTimeout(() => {
-        refreshAuth().then(() => {
-          navigate('/')
-        })
-      }, 100)
+      navigate('/')
     } catch (e: any) {
       const errorMsg = e?.response?.data?.error?.message || 'Invalid 2FA code'
       setError(errorMsg)

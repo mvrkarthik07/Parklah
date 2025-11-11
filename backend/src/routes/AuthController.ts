@@ -47,7 +47,8 @@ res.cookie('access_token', token, {
   path: '/',
   maxAge: 1000 * 60 * 60 * 24 // 24 hours default
 })
-res.json(ok({ id: user.id, email: user.email }))
+// Return token in response so frontend can store in localStorage
+res.json(ok({ id: user.id, email: user.email, token }))
 } catch (e:any) { 
   console.error('Registration error:', e)
   res.status(400).json(err(e.message || 'Registration failed')) 
@@ -68,6 +69,7 @@ if (result.requires2FA) {
     rememberMe: remember,
   }))
 }
+// Set cookie for backward compatibility, but also return token in response
 const cookieOptions: any = { 
   httpOnly: true, 
   sameSite: 'none', 
@@ -80,7 +82,14 @@ if (remember) {
   cookieOptions.maxAge = 1000 * 60 * 60 * 24 // 24 hours
 }
 res.cookie('access_token', result.token, cookieOptions)
-res.json(ok({ id: result.user.id, email: result.user.email, profile: result.user.profile, requires2FA: false }))
+// Return token in response so frontend can store in localStorage
+res.json(ok({ 
+  id: result.user.id, 
+  email: result.user.email, 
+  profile: result.user.profile, 
+  requires2FA: false,
+  token: result.token // Include token in response
+}))
 } catch (e:any) { 
   console.error('Login error:', e)
   res.status(400).json(err(e.message || 'Invalid email or password')) 
@@ -104,7 +113,8 @@ if (remember) {
   cookieOptions.maxAge = 1000 * 60 * 60 * 24 // 24 hours
 }
 res.cookie('access_token', jwtToken, cookieOptions)
-res.json(ok({ id: user.id, email: user.email, profile: user.profile }))
+// Return token in response so frontend can store in localStorage
+res.json(ok({ id: user.id, email: user.email, profile: user.profile, token: jwtToken }))
 } catch (e:any) { res.status(400).json(err(e.message)) }
 })
 

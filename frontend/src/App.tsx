@@ -12,6 +12,8 @@ function AppShell() {
     try {
       await api.post('/auth/logout')
     } finally {
+      const { removeToken } = await import('./lib/api')
+      removeToken()
       setAuthenticated(false)
       navigate('/login')
     }
