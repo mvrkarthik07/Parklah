@@ -43,7 +43,9 @@ const { user, token } = await register(
 res.cookie('access_token', token, { 
   httpOnly: true, 
   sameSite: 'none', 
-  secure: true 
+  secure: true,
+  path: '/',
+  maxAge: 1000 * 60 * 60 * 24 // 24 hours default
 })
 res.json(ok({ id: user.id, email: user.email }))
 } catch (e:any) { 
@@ -69,10 +71,13 @@ if (result.requires2FA) {
 const cookieOptions: any = { 
   httpOnly: true, 
   sameSite: 'none', 
-  secure: true 
+  secure: true,
+  path: '/'
 }
 if (remember) {
   cookieOptions.maxAge = 1000 * 60 * 60 * 24 * 30 // 30 days
+} else {
+  cookieOptions.maxAge = 1000 * 60 * 60 * 24 // 24 hours
 }
 res.cookie('access_token', result.token, cookieOptions)
 res.json(ok({ id: result.user.id, email: result.user.email, profile: result.user.profile, requires2FA: false }))
@@ -90,10 +95,13 @@ const { user, token: jwtToken } = await verify2FA(email.trim(), token)
 const cookieOptions: any = { 
   httpOnly: true, 
   sameSite: 'none', 
-  secure: true 
+  secure: true,
+  path: '/'
 }
 if (remember) {
   cookieOptions.maxAge = 1000 * 60 * 60 * 24 * 30
+} else {
+  cookieOptions.maxAge = 1000 * 60 * 60 * 24 // 24 hours
 }
 res.cookie('access_token', jwtToken, cookieOptions)
 res.json(ok({ id: user.id, email: user.email, profile: user.profile }))
