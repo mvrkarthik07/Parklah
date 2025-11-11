@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express'
-import { verify } from '../utils/jwt'
+import { verify } from '../utils/jwt.js'
 export function authGuard(req: Request, res: Response, next: NextFunction) {
 const token = req.cookies?.access_token
 if (!token) return res.status(401).json({ success: false, error: { code:

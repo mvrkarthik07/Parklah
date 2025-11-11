@@ -1,7 +1,7 @@
 import { Router } from 'express'
-import { ok, err } from '../utils/http'
-import { getForecast } from '../services/NEAService'
-import { geocodeLocation } from '../services/WeatherService'
+import { ok, err } from '../utils/http.js'
+import { getForecast } from '../services/NEAService.js'
+import { geocodeLocation } from '../services/WeatherService.js'
 const r = Router()
 r.get('/current', async (req, res) => {
 try {

@@ -1,4 +1,4 @@
-import { env } from '../config/env'
+import { env } from '../config/env.js'
 
 /**
  * Routing adapter - uses haversine distance with road factor for ETA estimation.

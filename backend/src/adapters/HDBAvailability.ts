@@ -1,5 +1,5 @@
 // backend/src/adapters/HDBAvailability.ts
-import { env } from '../config/env'
+import { env } from '../config/env.js'
 
 /**
  * Lot = one category of parking (C/H/S/Y)

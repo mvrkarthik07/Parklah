@@ -1,4 +1,4 @@
-import { env } from '../config/env'
+import { env } from '../config/env.js'
 import fetch from 'node-fetch'
 
 export async function geocodeLocation(location: string) {

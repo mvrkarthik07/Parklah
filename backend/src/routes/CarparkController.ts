@@ -1,6 +1,6 @@
 import { Router } from 'express'
-import { searchCarparks, searchCarparksByCoords } from '../services/CarparkService'
-import { getAllMeta, getAllAsCarparks, nearestN } from '../adapters/HDBCarparkAdapter'
+import { searchCarparks, searchCarparksByCoords } from '../services/CarparkService.js'
+import { getAllMeta, getAllAsCarparks, nearestN } from '../adapters/HDBCarparkAdapter.js'
 
 const r = Router()
 

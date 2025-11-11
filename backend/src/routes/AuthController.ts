@@ -11,9 +11,9 @@ import {
   getCurrent2FACode,
   requestPasswordReset,
   resetPassword,
-} from '../services/AuthService'
-import { ok, err } from '../utils/http'
-import { authGuard } from '../middlewares/authGuard'
+} from '../services/AuthService.js'
+import { ok, err } from '../utils/http.js'
+import { authGuard } from '../middlewares/authGuard.js'
 const r = Router()
 r.post('/register', async (req, res) => {
 try {

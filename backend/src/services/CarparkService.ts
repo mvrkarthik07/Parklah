@@ -13,10 +13,10 @@ import {
   centroidOfMeta,
   type Carpark,
   type Lot,
-} from '../adapters/HDBCarparkAdapter'
-import { getAvailabilityMap } from '../adapters/HDBAvailability'
-import { geocodeLocation } from '../services/WeatherService'
-import { env } from '../config/env'
+} from '../adapters/HDBCarparkAdapter.js'
+import { getAvailabilityMap } from '../adapters/HDBAvailability.js'
+import { geocodeLocation } from '../services/WeatherService.js'
+import { env } from '../config/env.js'
 
 function directDistanceMeters(
   from: { lat: number; lng: number },

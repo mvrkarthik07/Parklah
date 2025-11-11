@@ -1,8 +1,8 @@
 import { Router } from 'express'
-import { authGuard } from '../middlewares/authGuard'
+import { authGuard } from '../middlewares/authGuard.js'
 import { getVehicle, setVehicle, listFavorites, addFavorite, delFavorite } from
-'../services/UserService'
-import { ok } from '../utils/http'
+'../services/UserService.js'
+import { ok } from '../utils/http.js'
 const r = Router()
 r.use(authGuard)
 r.get('/vehicle', async (req, res) => {

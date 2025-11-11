@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import proj4 from 'proj4'
-import { env } from '../config/env'
+import { env } from '../config/env.js'
 
 export type Lot = { total: number; available: number }
 export type Carpark = {

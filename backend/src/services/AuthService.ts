@@ -1,7 +1,7 @@
 import { Prisma, PrismaClient, VehicleType } from '@prisma/client'
 import crypto from 'crypto'
-import { hash, compare } from '../utils/password'
-import { sign } from '../utils/jwt'
+import { hash, compare } from '../utils/password.js'
+import { sign } from '../utils/jwt.js'
 import { authenticator } from 'otplib'
 import QRCode from 'qrcode'
 
