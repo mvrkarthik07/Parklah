@@ -15,10 +15,15 @@ Railway makes deployment super easy. Follow these steps:
 3. **Click "New Project"** → **"Deploy from GitHub repo"**
 4. **Select your repository**
 5. **Configure Backend:**
-   - **Root Directory**: Set to `backend`
+   - **Root Directory**: Set to `backend` ⚠️ **IMPORTANT: Make sure this is set!**
    - **Build Command**: 
      ```bash
-     npm install && npm run build && npx prisma generate
+     npm install && npm run build
+     ```
+     (Note: `prisma generate` runs automatically via `postinstall` script)
+   - **OR if Root Directory doesn't work, use:**
+     ```bash
+     cd backend && npm install && npm run build
      ```
    - **Start Command**: 
      ```bash
